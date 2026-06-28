@@ -1,0 +1,21 @@
+{
+  "name": "Do — Three a Day",
+  "short_name": "Do",
+  "description": "A laser-focused daily tracker for your three key empowering activities.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FAF7F2",
+  "theme_color": "#7A9B7E",
+  "icons": [
+    {
+      "src": "assets/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
