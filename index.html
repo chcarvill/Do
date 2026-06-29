@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Do — Three a Day</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#7A9B7E" />
+<link rel="icon" type="image/png" href="assets/app-icon-192.png" />
+<link rel="apple-touch-icon" href="assets/app-icon-192.png" />
+<style>
+  :root {
+    --paper:      #FAF7F2;
+    --paper-dim:  #F1ECE3;
+    --ink:        #1F2937;
+    --ink-soft:   #5B6472;
+    --line:       #DAD3C6;
+
+    --sage:       #7A9B7E;
+    --sage-dark:  #4A6B4F;
+    --sage-tint:  #E7EEE6;
+
+    --clay:       #C97D5D;
+    --clay-dark:  #8A4F36;
+    --clay-tint:  #F3E3DA;
+
+    --amber:      #D9A441;
+    --amber-tint: #FBF1DC;
+    --amber-dark: #8A6418;
+
+    --gray-tint:  #ECECEC;
+
+    --shadow:      0 1px 2px rgba(31,41,55,0.06), 0 2px 8px rgba(31,41,55,0.06);
+    --shadow-lift: 0 6px 20px rgba(31,41,55,0.16);
+
+    --serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+    --sans:  "Inter", "Helvetica Neue", Arial, sans-serif;
+    --mono:  "IBM Plex Mono", "SF Mono", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    height: 100%;
+  }
+
+  #app {
+    max-width: 720px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  header {
+    padding: 28px 24px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  header .top-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  header h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 26px;
+    margin: 0;
+    letter-spacing: 0.2px;
+  }
+
+  header .today-label {
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-top: 2px;
+  }
+
+  .streak-badge {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+    background: var(--sage-tint);
+    border: 1px solid var(--sage);
+    border-radius: 20px;
+    padding: 5px 12px;
+    white-space: nowrap;
+  }
+  .streak-badge b { color: var(--sage-dark); font-size: 15px; }
+
+  /* ── The three stones (signature element) ─────────────────── */
+  #stones-section {
+    padding: 32px 24px 8px;
+  }
+
+  #stones-row {
+    display: flex;
+    gap: 16px;
+  }
+
+  .stone {
+    flex: 1;
+    position: relative;
+    aspect-ratio: 1 / 1.08;
+    border-radius: 16px;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.12s;
+  }
+  .stone:hover { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+
+  .stone .stone-number {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    opacity: 0.55;
+  }
+
+  .stone.empty {
+    border-style: dashed;
+    border-color: var(--line);
+  }
+  .stone.empty .stone-cta {
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+  .stone.empty .stone-plus {
+    font-size: 26px;
+    color: var(--ink-soft);
+    line-height: 1;
+    margin-bottom: 4px;
+    font-weight: 300;
+  }
+
+  .stone.active {
+    border-color: var(--sage);
+    background: var(--sage-tint);
+  }
+  .stone.active .stone-activity {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--sage-dark);
+    line-height: 1.25;
+    margin-bottom: 10px;
+  }
+
+  .stone.done {
+    border-color: var(--sage-dark);
+    background: var(--sage);
+  }
+  .stone.done .stone-activity {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 16px;
+    color: white;
+    line-height: 1.25;
+    margin-bottom: 8px;
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+    text-decoration-color: rgba(255,255,255,0.6);
+  }
+  .stone.done .stone-check {
+    font-size: 22px;
+    color: white;
+  }
+
+  .stone-mark-done {
+    margin-top: 2px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--sage-dark);
+    background: var(--paper);
+    color: var(--sage-dark);
+    border-radius: 7px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .stone-mark-done:hover { background: var(--sage-dark); color: white; }
+
+  .stone-cancel {
+    position: absolute;
+    top: 8px;
+    right: 9px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px;
+    line-height: 1;
+  }
+  .stone-cancel:hover { opacity: 1; color: var(--clay-dark); }
+
+  #stones-hint {
+    text-align: center;
+    font-size: 12px;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-top: 12px;
+  }
+
+  /* ── Activity picker modal ──────────────────────────────── */
+  #picker-overlay, #reason-overlay, #manage-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(31,41,55,0.35);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 20px;
+  }
+  #picker-overlay.open, #reason-overlay.open, #manage-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--paper);
+    border-radius: 14px;
+    padding: 22px 24px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: var(--shadow-lift);
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .modal h2 {
+    font-family: var(--serif);
+    font-size: 18px;
+    margin: 0 0 6px;
+  }
+  .modal .modal-sub {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin: 0 0 16px;
+  }
+
+  #activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .activity-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    background: var(--paper);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .activity-option:hover { background: var(--sage-tint); border-color: var(--sage); }
+  .activity-option .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  .modal-divider {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 14px 0;
+  }
+
+  #new-activity-row {
+    display: flex;
+    gap: 8px;
+  }
+  #new-activity-input {
+    flex: 1;
+    font-family: var(--sans);
+    font-size: 13px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 10px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  .btn {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    padding: 7px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover { background: var(--sage-tint); border-color: var(--sage); }
+  .btn.primary { background: var(--sage); color: white; border-color: var(--sage-dark); }
+  .btn.primary:hover { background: var(--sage-dark); }
+  .btn.warn { background: var(--clay-tint); color: var(--clay-dark); border-color: var(--clay); }
+  .btn.warn:hover { background: var(--clay); color: white; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  #reason-overlay textarea {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-height: 90px;
+    resize: vertical;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  #reason-activity-name {
+    font-family: var(--serif);
+    font-weight: 600;
+    color: var(--clay-dark);
+  }
+
+  /* ── History / streak section ──────────────────────────── */
+  #history-section {
+    padding: 28px 24px 40px;
+    flex: 1;
+  }
+
+  #history-section h2 {
+    font-family: var(--serif);
+    font-size: 16px;
+    margin: 0 0 14px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  #manage-link {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+  }
+  #manage-link:hover { color: var(--sage-dark); }
+
+  .day-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .day-row:last-child { border-bottom: none; }
+
+  .day-row .day-date {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    width: 76px;
+    flex: 0 0 auto;
+  }
+
+  .day-row .day-dots {
+    display: flex;
+    gap: 5px;
+    flex: 0 0 auto;
+  }
+  .day-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--gray-tint);
+    border: 1px solid var(--line);
+  }
+  .day-dot.done { background: var(--sage); border-color: var(--sage-dark); }
+  .day-dot.cancelled { background: var(--clay-tint); border-color: var(--clay); }
+
+  .day-row .day-summary {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #history-empty {
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  /* ── Log entries detail (cancel/substitute reasons) ───────── */
+  .log-entry-wrap {
+    padding: 2px 0 8px;
+  }
+  .log-entry {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    padding: 6px 0 6px 18px;
+    border-left: 2px solid var(--clay-tint);
+    margin-top: 4px;
+  }
+  .log-entry b { color: var(--clay-dark); font-weight: 600; }
+
+  /* ── Manage activities modal ──────────────────────────────── */
+  #manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .manage-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 8px 12px;
+  }
+  .manage-row .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+  .manage-row span.name { flex: 1; font-size: 13.5px; font-weight: 500; }
+  .manage-row .remove-activity {
+    font-size: 13px;
+    color: var(--ink-soft);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+  .manage-row .remove-activity:hover { opacity: 1; color: var(--clay-dark); }
+
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <header>
+    <div class="top-row">
+      <div>
+        <h1>Do</h1>
+        <div class="today-label" id="today-label"></div>
+      </div>
+      <div class="streak-badge" id="streak-badge"></div>
+    </div>
+  </header>
+
+  <section id="stones-section">
+    <div id="stones-row"></div>
+    <div id="stones-hint">Three, no more. Choose with intent.</div>
+  </section>
+
+  <section id="history-section">
+    <h2>
+      <span>Past days</span>
+      <span id="manage-link">Manage activities</span>
+    </h2>
+    <div id="history-list"></div>
+  </section>
+
+</div>
+
+<!-- Pick an activity for an empty stone -->
+<div id="picker-overlay">
+  <div class="modal">
+    <h2 id="picker-title">Choose your task</h2>
+    <p class="modal-sub" id="picker-sub">Pick one of your key empowering activities.</p>
+    <div id="activity-list"></div>
+    <hr class="modal-divider" />
+    <label style="font-size:12px; color:var(--ink-soft); display:block; margin-bottom:6px;">Add a new activity</label>
+    <div id="new-activity-row">
+      <input id="new-activity-input" type="text" placeholder="e.g. Cold outreach" />
+      <button class="btn" id="btn-add-activity">Add</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="btn-cancel-picker">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reason required when cancelling/substituting an active task -->
+<div id="reason-overlay">
+  <div class="modal">
+    <h2>Why change <span id="reason-activity-name"></span>?</h2>
+    <p class="modal-sub">A quick, honest line. This gets kept in your history.</p>
+    <textarea id="reason-text" placeholder="What happened…"></textarea>
+    <div class="modal-actions">
+      <button class="btn" id="btn-cancel-reason">Never mind</button>
+      <button class="btn warn" id="btn-confirm-reason" disabled>Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage the activity pool -->
+<div id="manage-overlay">
+  <div class="modal">
+    <h2>Your activities</h2>
+    <p class="modal-sub">The pool you choose from each day.</p>
+    <div id="manage-list"></div>
+    <hr class="modal-divider" />
+    <div id="new-activity-row-2" style="display:flex; gap:8px;">
+      <input id="new-activity-input-2" type="text" placeholder="e.g. Cold outreach" style="flex:1; font-family: var(--sans); font-size:13px; border:1px solid var(--line); border-radius:7px; padding:8px 10px; background: var(--paper); color: var(--ink);" />
+      <button class="btn" id="btn-add-activity-2">Add</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" id="btn-close-manage">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
