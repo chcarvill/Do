@@ -1,53 +1,54 @@
 /* ============================================================
-   Do — Three a Day
+   Communic8 — Marketing & Sales Board
    Vanilla JS. No build step. No frameworks.
-   Data persists to localStorage. Seed activities on first run.
+   Data persists to localStorage; seed data comes from
+   data-embedded.js (a JS copy of data.json) on first run only.
    ============================================================ */
 
-const STORAGE_KEY = "do_three_a_day_v1";
+const STORAGE_KEY = "communic8_marketing_state_v1";
 
-const PALETTE = ["sage", "clay", "amber", "teal", "blue", "purple", "pink", "gray"];
-// extra colors beyond the core 3 used in CSS vars already defined (sage/clay/amber);
-// the rest reuse Communic8-style hues so new activities stay visually distinct.
-const EXTRA_COLORS = {
-  teal:   "#4D8C8C",
-  blue:   "#5A7FB5",
-  purple: "#8C6FB0",
-  pink:   "#C97DA0",
-  gray:   "#8C8C8C",
+const CATEGORY_COLOR_VARS = {
+  coral: "coral", amber: "amber", teal: "teal", blue: "blue",
+  gray: "gray", purple: "purple", green: "green", pink: "pink"
 };
 
 let STATE = {
-  activities: [],   // [{id, label, color}]
-  days: {},          // 'YYYY-MM-DD' -> { slots: [{id, activityId, status}], log: [...] }
+  categories: [],     // [{id, label, color}]
+  ideas: [],           // [{id, category, title, description}]
+  children: [],         // [{id, ideaId, type: 'creation'|'application', done:false, scheduledDate: null|'YYYY-MM-DD', parked:false, canvasX, canvasY}]
+  canvasPositions: {}, // ideaId -> {x,y}  (idea card positions on canvas)
 };
 
-let pendingSlotIndex = null;   // which stone (0/1/2) the picker modal is filling
-let pendingCancelSlot = null;  // which stone is being cancelled/substituted, awaiting a reason
-let pendingSubstituteActivityId = null; // if cancelling-to-substitute, the new activity chosen
+let viewWeekStart = startOfWeek(new Date());
+let viewMonthStart = startOfMonth(new Date());
+let calendarViewMode = "week"; // 'week' | 'month'
+let dragPayload = null; // { childId } while dragging
 
 /* ---------------------------------------------------------- */
 /* Bootstrapping                                                */
 /* ---------------------------------------------------------- */
 
-function boot() {
+async function boot() {
   const saved = loadFromStorage();
   if (saved) {
     STATE = saved;
   } else {
-    STATE.activities = [
-      { id: "a_oration", label: "Oration", color: "amber" },
-      { id: "a_coding", label: "Coding", color: "blue" },
-      { id: "a_bizplanning", label: "Targeted business planning", color: "clay" },
-      { id: "a_networking", label: "Networking", color: "purple" },
-      { id: "a_practice", label: "Occupational practice", color: "sage" },
-      { id: "a_investing", label: "Investing", color: "teal" },
-      { id: "a_exercise", label: "Physical exercise", color: "pink" },
-    ];
-    STATE.days = {};
+    // Seed data is loaded via a plain <script> tag (data-embedded.js) rather
+    // than fetch(), because fetch() of local files is blocked by browsers
+    // under the file:// protocol — this way the app works the moment you
+    // double-click index.html, with no local server required.
+    const seed = window.__COMMUNIC8_SEED_DATA__;
+    if (!seed) {
+      console.error("Seed data not found — make sure data-embedded.js is loaded before app.js.");
+      return;
+    }
+    STATE.categories = seed.categories;
+    STATE.ideas = seed.ideas;
+    STATE.children = [];
+    STATE.canvasPositions = {};
+    layoutCanvasPositions(); // initial clustered layout
     saveToStorage();
   }
-  ensureToday();
   render();
 }
 
@@ -71,8 +72,75 @@ function saveToStorage() {
 }
 
 /* ---------------------------------------------------------- */
+/* Canvas layout — loose clustering by category, with jitter   */
+/* ---------------------------------------------------------- */
+
+function layoutCanvasPositions() {
+  const cols = 5;
+  const cellW = 430;
+  const cellH = 300;
+  const catIndex = {};
+  STATE.categories.forEach((c, i) => (catIndex[c.id] = i));
+
+  const grouped = {};
+  STATE.ideas.forEach((idea) => {
+    grouped[idea.category] = grouped[idea.category] || [];
+    grouped[idea.category].push(idea);
+  });
+
+  STATE.categories.forEach((cat, ci) => {
+    const col = ci % cols;
+    const row = Math.floor(ci / cols);
+    const baseX = 60 + col * cellW;
+    const baseY = 50 + row * cellH;
+    const ideas = grouped[cat.id] || [];
+
+    ideas.forEach((idea, ii) => {
+      const subCol = ii % 2;
+      const subRow = Math.floor(ii / 2);
+      const jitterX = (Math.random() - 0.5) * 18;
+      const jitterY = (Math.random() - 0.5) * 18;
+      STATE.canvasPositions[idea.id] = {
+        x: baseX + subCol * 205 + jitterX,
+        y: baseY + 38 + subRow * 150 + jitterY,
+      };
+    });
+  });
+}
+
+function clusterBounds() {
+  // compute a bounding box per category from current idea positions, for the halo
+  const bounds = {};
+  STATE.categories.forEach((cat) => {
+    const ideas = STATE.ideas.filter((i) => i.category === cat.id);
+    if (!ideas.length) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    ideas.forEach((idea) => {
+      const p = STATE.canvasPositions[idea.id];
+      if (!p) return;
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + 190);
+      maxY = Math.max(maxY, p.y + 130);
+    });
+    if (minX === Infinity) return;
+    bounds[cat.id] = { x: minX - 22, y: minY - 36, w: (maxX - minX) + 44, h: (maxY - minY) + 56 };
+  });
+  return bounds;
+}
+
+/* ---------------------------------------------------------- */
 /* Date helpers                                                  */
 /* ---------------------------------------------------------- */
+
+function startOfWeek(d) {
+  const date = new Date(d);
+  const day = date.getDay(); // 0 = Sunday
+  const diff = day === 0 ? -6 : 1 - day; // make Monday the start
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
 
 function fmtISO(date) {
   const y = date.getFullYear();
@@ -81,82 +149,50 @@ function fmtISO(date) {
   return `${y}-${m}-${d}`;
 }
 
-function todayISO() {
-  return fmtISO(new Date());
+function isSameDay(a, b) {
+  return fmtISO(a) === fmtISO(b);
 }
 
-function isoMinusDays(iso, n) {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() - n);
-  return fmtISO(d);
-}
-
-function fmtDayLabel(iso) {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-}
-
-/* ---------------------------------------------------------- */
-/* Day / slot helpers                                            */
-/* ---------------------------------------------------------- */
-
-function ensureToday() {
-  const iso = todayISO();
-  if (!STATE.days[iso]) {
-    STATE.days[iso] = {
-      slots: [
-        { id: "s_" + iso + "_0", activityId: null, status: "empty" },
-        { id: "s_" + iso + "_1", activityId: null, status: "empty" },
-        { id: "s_" + iso + "_2", activityId: null, status: "empty" },
-      ],
-      log: [],
-    };
-    saveToStorage();
+function weekDays(weekStart) {
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    days.push(d);
   }
+  return days;
 }
 
-function todayData() {
-  return STATE.days[todayISO()];
+function startOfMonth(d) {
+  const date = new Date(d.getFullYear(), d.getMonth(), 1);
+  date.setHours(0, 0, 0, 0);
+  return date;
 }
 
-function activityById(id) {
-  return STATE.activities.find((a) => a.id === id);
-}
+/* a month "grid" always shows full Mon-Sun weeks, so it includes the   */
+/* tail of the previous month and the start of the next to fill out the */
+/* first and last rows — each returned day knows if it's in-month.      */
+function monthGridWeeks(monthStart) {
+  const gridStart = startOfWeek(monthStart);
+  const monthIndex = monthStart.getMonth();
+  const weeks = [];
+  let cursor = new Date(gridStart);
 
-function colorHex(colorName) {
-  return EXTRA_COLORS[colorName] || `var(--${colorName})`;
-}
-
-/* ---------------------------------------------------------- */
-/* Streak calculation                                            */
-/* A day "counts" toward the streak if all 3 slots ended the    */
-/* day marked done. Today never breaks an existing streak while */
-/* still in progress — it only extends it once complete.        */
-/* ---------------------------------------------------------- */
-
-function dayIsComplete(dayData) {
-  if (!dayData) return false;
-  return dayData.slots.length === 3 && dayData.slots.every((s) => s.status === "done");
-}
-
-function computeStreak() {
-  let streak = 0;
-  let cursor = todayISO();
-  const today = STATE.days[cursor];
-
-  // if today is already fully done, it counts; otherwise start checking from yesterday
-  if (dayIsComplete(today)) {
-    streak++;
-    cursor = isoMinusDays(cursor, 1);
-  } else {
-    cursor = isoMinusDays(cursor, 1);
+  // a calendar month needs at most 6 weeks to fully contain it
+  for (let w = 0; w < 6; w++) {
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      week.push({ date: new Date(cursor), inMonth: cursor.getMonth() === monthIndex });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(week);
+    // stop once we've completed the month and filled its last week
+    if (cursor.getMonth() !== monthIndex && week.some((d) => d.inMonth)) {
+      // we've just stepped past the month's last day and finished that row
+      break;
+    }
   }
-
-  while (STATE.days[cursor] && dayIsComplete(STATE.days[cursor])) {
-    streak++;
-    cursor = isoMinusDays(cursor, 1);
-  }
-  return streak;
+  return weeks;
 }
 
 /* ---------------------------------------------------------- */
@@ -164,139 +200,108 @@ function computeStreak() {
 /* ---------------------------------------------------------- */
 
 function render() {
-  renderHeader();
-  renderStones();
-  renderHistory();
+  renderStats();
+  renderCanvas();
+  renderStaging();
+  renderCalendar();
 }
 
-function renderHeader() {
-  document.getElementById("today-label").textContent =
-    new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-
-  const streak = computeStreak();
-  document.getElementById("streak-badge").innerHTML =
-    streak > 0
-      ? `<b>${streak}</b> day${streak === 1 ? "" : "s"} strong`
-      : `<span>start today</span>`;
+function renderStats() {
+  const total = STATE.ideas.length;
+  const spawned = STATE.children.length;
+  const scheduled = STATE.children.filter((c) => c.scheduledDate).length;
+  const done = STATE.children.filter((c) => c.done).length;
+  document.getElementById("header-stats").innerHTML = `
+    <span><b>${total}</b> ideas</span>
+    <span><b>${spawned}</b> in motion</span>
+    <span><b>${scheduled}</b> on the calendar</span>
+    <span><b>${done}</b> completed</span>
+  `;
 }
 
-function renderStones() {
-  const row = document.getElementById("stones-row");
-  row.innerHTML = "";
-  const day = todayData();
+function categoryById(id) {
+  return STATE.categories.find((c) => c.id === id);
+}
 
-  day.slots.forEach((slot, i) => {
-    const stone = document.createElement("div");
-    stone.dataset.slotIndex = i;
+function ideaById(id) {
+  return STATE.ideas.find((i) => i.id === id);
+}
 
-    if (slot.status === "empty") {
-      stone.className = "stone empty";
-      stone.innerHTML = `
-        <span class="stone-number">${i + 1}</span>
-        <span class="stone-plus">+</span>
-        <span class="stone-cta">Pick a task</span>
-      `;
-      stone.addEventListener("click", () => openPicker(i));
-    } else {
-      const activity = activityById(slot.activityId);
-      const label = activity ? activity.label : "Unknown";
-      const statusClass = slot.status === "done" ? "done" : "active";
-      stone.className = `stone ${statusClass}`;
-      stone.innerHTML = `
-        <span class="stone-number">${i + 1}</span>
-        <span class="stone-cancel" title="Cancel or swap this task">✕</span>
-        <span class="stone-activity">${escapeHtml(label)}</span>
-        ${
-          slot.status === "done"
-            ? `<span class="stone-check">✓ done</span>`
-            : `<button class="stone-mark-done">Mark done</button>`
-        }
-      `;
-      const cancelEl = stone.querySelector(".stone-cancel");
-      cancelEl.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openCancelReason(i);
-      });
-      const doneBtn = stone.querySelector(".stone-mark-done");
-      if (doneBtn) {
-        doneBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          markDone(i);
-        });
-      }
-    }
+function childById(id) {
+  return STATE.children.find((c) => c.id === id);
+}
 
-    row.appendChild(stone);
+function renderCanvas() {
+  const canvas = document.getElementById("canvas");
+  const filterText = (document.getElementById("search").value || "").toLowerCase().trim();
+  canvas.innerHTML = "";
+
+  // halos first (so cards render above them)
+  const bounds = clusterBounds();
+  STATE.categories.forEach((cat) => {
+    const b = bounds[cat.id];
+    if (!b) return;
+    const halo = document.createElement("div");
+    halo.className = "cluster-halo";
+    halo.style.left = b.x + "px";
+    halo.style.top = b.y + "px";
+    halo.style.width = b.w + "px";
+    halo.style.height = b.h + "px";
+    halo.style.background = `var(--${cat.color}-tint)`;
+    canvas.appendChild(halo);
+
+    const label = document.createElement("div");
+    label.className = "cluster-label";
+    label.style.left = b.x + 10 + "px";
+    label.style.top = b.y - 4 + "px";
+    label.textContent = cat.label;
+    canvas.appendChild(label);
   });
-}
 
-function renderHistory() {
-  const list = document.getElementById("history-list");
-  list.innerHTML = "";
+  STATE.ideas.forEach((idea) => {
+    if (filterText) {
+      const hay = (idea.title + " " + (idea.description || "")).toLowerCase();
+      if (!hay.includes(filterText)) return;
+    }
+    const pos = STATE.canvasPositions[idea.id] || { x: 40, y: 40 };
+    const cat = categoryById(idea.category);
+    const card = document.createElement("div");
+    card.className = "idea-card";
+    card.style.left = pos.x + "px";
+    card.style.top = pos.y + "px";
+    card.dataset.ideaId = idea.id;
 
-  const todayIso = todayISO();
-  const isoKeys = Object.keys(STATE.days)
-    .filter((iso) => iso !== todayIso)
-    .sort((a, b) => (a < b ? 1 : -1))
-    .slice(0, 14);
+    const creationChild = STATE.children.find((c) => c.ideaId === idea.id && c.type === "creation");
+    const applicationChild = STATE.children.find((c) => c.ideaId === idea.id && c.type === "application");
 
-  if (!isoKeys.length) {
-    const empty = document.createElement("div");
-    empty.id = "history-empty";
-    empty.textContent = "Your past days will show up here once today wraps up.";
-    list.appendChild(empty);
-    return;
-  }
-
-  isoKeys.forEach((iso) => {
-    const day = STATE.days[iso];
-    const row = document.createElement("div");
-    row.className = "day-row";
-
-    const dots = day.slots
-      .map((s) => `<span class="day-dot ${s.status === "done" ? "done" : s.status === "cancelled" ? "cancelled" : ""}"></span>`)
-      .join("");
-
-    const doneCount = day.slots.filter((s) => s.status === "done").length;
-    const namedDone = day.slots
-      .filter((s) => s.status === "done")
-      .map((s) => (activityById(s.activityId) || {}).label)
-      .filter(Boolean)
-      .join(", ");
-
-    row.innerHTML = `
-      <span class="day-date">${fmtDayLabel(iso)}</span>
-      <span class="day-dots">${dots}</span>
-      <span class="day-summary">${doneCount}/3 — ${escapeHtml(namedDone || "nothing logged")}</span>
+    card.innerHTML = `
+      <span class="cat-tag" style="color: var(--${cat.color});">${escapeHtml(cat.label)}</span>
+      <div class="idea-title">${escapeHtml(idea.title)}</div>
+      <div class="idea-desc">${escapeHtml(idea.description || "")}</div>
+      <div class="spawn-row">
+        <button class="spawn-btn creation ${creationChild ? "spawned" : ""}" data-action="spawn-creation" data-idea="${idea.id}">
+          <img src="assets/icon-creation.png" alt="" /> ${creationChild ? "Building ✓" : "Build it"}
+        </button>
+        <button class="spawn-btn application ${applicationChild ? "spawned" : ""}" data-action="spawn-application" data-idea="${idea.id}">
+          <img src="assets/icon-application.png" alt="" /> ${applicationChild ? "Doing ✓" : "Do it"}
+        </button>
+      </div>
+      <div class="idea-children"></div>
     `;
 
-    if (day.log && day.log.length) {
-      row.style.cursor = "pointer";
-      row.title = "Click to see what changed that day";
-      row.addEventListener("click", () => toggleLogDetail(row, day.log));
-    }
+    // a parked child (spawned, no date, dragged back onto the canvas) lives
+    // embedded right here on its parent idea card. Dragging it back to the
+    // staging row (or anywhere on the canvas, to re-park) toggles between
+    // the two; giving it a date sends it to the calendar from either place.
+    const childSlot = card.querySelector(".idea-children");
+    [creationChild, applicationChild].forEach((child) => {
+      if (child && child.parked && !child.scheduledDate) {
+        childSlot.appendChild(buildChildCardEl(child, { hideParent: true }));
+      }
+    });
 
-    list.appendChild(row);
+    canvas.appendChild(card);
   });
-}
-
-function toggleLogDetail(row, log) {
-  const existing = row.nextElementSibling;
-  if (existing && existing.classList.contains("log-entry-wrap")) {
-    existing.remove();
-    return;
-  }
-  const wrap = document.createElement("div");
-  wrap.className = "log-entry-wrap";
-  log.forEach((entry) => {
-    const activity = activityById(entry.activityId);
-    const div = document.createElement("div");
-    div.className = "log-entry";
-    const verb = entry.type === "substituted" ? "Swapped" : "Cancelled";
-    div.innerHTML = `<b>${verb}</b> ${escapeHtml(activity ? activity.label : "a task")} — ${escapeHtml(entry.reason)}`;
-    wrap.appendChild(div);
-  });
-  row.insertAdjacentElement("afterend", wrap);
 }
 
 function escapeHtml(str) {
@@ -306,236 +311,594 @@ function escapeHtml(str) {
 }
 
 /* ---------------------------------------------------------- */
-/* Slot actions                                                  */
+/* Staging panel — holds spawned creation/application tiles    */
+/* that are actively being scheduled: no scheduledDate yet, and */
+/* not parked back on their idea card. Setting a date (here, or */
+/* by dragging straight onto a calendar day) moves a tile out   */
+/* of staging; clearing a calendar date brings it back here.    */
+/* Dragging a staging tile onto the canvas parks it back on its */
+/* idea card instead — see wireCanvasDropTarget.                */
 /* ---------------------------------------------------------- */
 
-function markDone(slotIndex) {
-  const day = todayData();
-  day.slots[slotIndex].status = "done";
-  saveToStorage();
-  render();
-}
+function renderStaging() {
+  const row = document.getElementById("staging-row");
+  row.innerHTML = "";
 
-function assignActivity(slotIndex, activityId) {
-  const day = todayData();
-  day.slots[slotIndex].activityId = activityId;
-  day.slots[slotIndex].status = "active";
-  saveToStorage();
-  render();
-}
+  const active = STATE.children.filter((c) => !c.scheduledDate && !c.parked);
 
-/* ---------------------------------------------------------- */
-/* Picker modal (filling an empty stone)                         */
-/* ---------------------------------------------------------- */
-
-function openPicker(slotIndex) {
-  pendingSlotIndex = slotIndex;
-  document.getElementById("picker-title").textContent = "Choose your task";
-  document.getElementById("picker-sub").textContent = "Pick one of your key empowering activities.";
-  renderActivityList();
-  document.getElementById("new-activity-input").value = "";
-  document.getElementById("picker-overlay").classList.add("open");
-}
-
-function renderActivityList() {
-  const list = document.getElementById("activity-list");
-  list.innerHTML = "";
-  STATE.activities.forEach((activity) => {
-    const opt = document.createElement("div");
-    opt.className = "activity-option";
-    opt.innerHTML = `<span class="dot" style="background:${colorHex(activity.color)};"></span> ${escapeHtml(activity.label)}`;
-    opt.addEventListener("click", () => {
-      if (pendingCancelSlot !== null) {
-        // we're substituting: this choice becomes the new activity, but only
-        // after a reason is confirmed — so stash it and open the reason modal.
-        pendingSubstituteActivityId = activity.id;
-        document.getElementById("picker-overlay").classList.remove("open");
-        openReasonModal(pendingCancelSlot, "substituted", activity.id);
-      } else {
-        assignActivity(pendingSlotIndex, activity.id);
-        closePicker();
-      }
-    });
-    list.appendChild(opt);
-  });
-}
-
-function closePicker() {
-  document.getElementById("picker-overlay").classList.remove("open");
-  pendingSlotIndex = null;
-}
-
-/* ---------------------------------------------------------- */
-/* Cancel / substitute flow — always requires a reason           */
-/* ---------------------------------------------------------- */
-
-function openCancelReason(slotIndex) {
-  pendingCancelSlot = slotIndex;
-  // offer the choice: cancel outright, or pick a substitute first (which
-  // re-opens the picker, then funnels into the same reason requirement)
-  document.getElementById("picker-title").textContent = "Swap for a different task";
-  document.getElementById("picker-sub").textContent = "Or cancel outright below — either way, you'll explain why.";
-  renderActivityList();
-  document.getElementById("new-activity-input").value = "";
-
-  // add a "cancel outright, no substitute" action above the list
-  const list = document.getElementById("activity-list");
-  const cancelOutright = document.createElement("div");
-  cancelOutright.className = "activity-option";
-  cancelOutright.style.borderColor = "var(--clay)";
-  cancelOutright.style.background = "var(--clay-tint)";
-  cancelOutright.style.color = "var(--clay-dark)";
-  cancelOutright.innerHTML = `<span class="dot" style="background:var(--clay);"></span> Cancel — leave this slot empty`;
-  cancelOutright.addEventListener("click", () => {
-    document.getElementById("picker-overlay").classList.remove("open");
-    openReasonModal(slotIndex, "cancelled", null);
-  });
-  list.insertBefore(cancelOutright, list.firstChild);
-
-  document.getElementById("picker-overlay").classList.add("open");
-}
-
-function openReasonModal(slotIndex, type, substituteActivityId) {
-  pendingCancelSlot = slotIndex;
-  pendingSubstituteActivityId = substituteActivityId;
-  const day = todayData();
-  const currentActivity = activityById(day.slots[slotIndex].activityId);
-  document.getElementById("reason-activity-name").textContent = currentActivity ? currentActivity.label : "this task";
-  document.getElementById("reason-text").value = "";
-  document.getElementById("btn-confirm-reason").disabled = true;
-  document.getElementById("reason-overlay").dataset.type = type;
-  document.getElementById("reason-overlay").classList.add("open");
-}
-
-function closeReasonModal() {
-  document.getElementById("reason-overlay").classList.remove("open");
-  pendingCancelSlot = null;
-  pendingSubstituteActivityId = null;
-}
-
-function confirmReason() {
-  const reasonText = document.getElementById("reason-text").value.trim();
-  if (!reasonText) return;
-  const type = document.getElementById("reason-overlay").dataset.type;
-  const day = todayData();
-  const slot = day.slots[pendingCancelSlot];
-
-  day.log.push({
-    ts: new Date().toISOString(),
-    type,
-    activityId: slot.activityId,
-    reason: reasonText,
-  });
-
-  if (type === "substituted" && pendingSubstituteActivityId) {
-    slot.activityId = pendingSubstituteActivityId;
-    slot.status = "active";
+  if (!active.length) {
+    const empty = document.createElement("div");
+    empty.id = "staging-empty";
+    empty.textContent = "Nothing waiting — spawned tiles will land here until you give them a date.";
+    row.appendChild(empty);
   } else {
-    slot.activityId = null;
-    slot.status = "empty";
+    active.forEach((child) => row.appendChild(buildChildCardEl(child)));
+  }
+}
+
+/* wired once on init — #staging-row itself is reused across renders */
+/* (only its contents are replaced), so listeners go here, not above. */
+function wireStagingDropTarget() {
+  const row = document.getElementById("staging-row");
+  row.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    row.classList.add("drag-over");
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+  row.addEventListener("drop", (e) => {
+    e.preventDefault();
+    row.classList.remove("drag-over");
+    if (!dragPayload) return;
+    const child = childById(dragPayload.childId);
+    if (!child) return;
+    child.scheduledDate = null;
+    child.parked = false; // dropping in staging always re-activates it, even if it came from being parked
+    saveToStorage();
+    render();
+  });
+}
+
+/* ---------------------------------------------------------- */
+/* Idea card dragging (repositioning within canvas)             */
+/* One delegated drag controller for the whole canvas, rather   */
+/* than per-card window listeners — avoids listener buildup     */
+/* across repeated re-renders.                                  */
+/* ---------------------------------------------------------- */
+
+let canvasDragState = null; // { ideaId, startX, startY, origX, origY, cardEl }
+
+function wireCanvasDragController() {
+  const canvasWrap = document.getElementById("canvas-wrap");
+
+  canvasWrap.addEventListener("mousedown", (e) => {
+    const card = e.target.closest(".idea-card");
+    if (!card) return;
+    if (e.target.closest(".spawn-btn")) return; // don't drag when clicking a button
+    if (e.target.closest(".child-card")) return; // don't drag the idea card when interacting with an embedded chip (date field, icons, or dragging the chip itself)
+
+    const ideaId = card.dataset.ideaId;
+    const pos = STATE.canvasPositions[ideaId];
+    if (!pos) return;
+
+    canvasDragState = {
+      ideaId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: pos.x,
+      origY: pos.y,
+      cardEl: card,
+    };
+    card.classList.add("dragging");
+    e.preventDefault();
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!canvasDragState) return;
+    const dx = e.clientX - canvasDragState.startX;
+    const dy = e.clientY - canvasDragState.startY;
+    const newX = canvasDragState.origX + dx;
+    const newY = canvasDragState.origY + dy;
+    STATE.canvasPositions[canvasDragState.ideaId] = { x: newX, y: newY };
+    canvasDragState.cardEl.style.left = newX + "px";
+    canvasDragState.cardEl.style.top = newY + "px";
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (!canvasDragState) return;
+    canvasDragState.cardEl.classList.remove("dragging");
+    canvasDragState = null;
+    saveToStorage();
+    renderCanvas(); // redraw halos to fit new position
+  });
+}
+
+/* ---------------------------------------------------------- */
+/* Spawning children                                             */
+/* ---------------------------------------------------------- */
+
+function spawnChild(ideaId, type) {
+  const exists = STATE.children.find((c) => c.ideaId === ideaId && c.type === type);
+  if (exists) return; // one creation + one application per idea
+  const child = {
+    id: "c_" + ideaId + "_" + type + "_" + Date.now(),
+    ideaId,
+    type, // 'creation' | 'application'
+    done: false,
+    scheduledDate: null,
+    parked: false, // false = sitting in the staging panel; true = parked back on its idea card
+  };
+  STATE.children.push(child);
+  saveToStorage();
+  render();
+}
+
+/* ---------------------------------------------------------- */
+/* Child card builder (used on idea cards and on the calendar)  */
+/* ---------------------------------------------------------- */
+
+function buildChildCardEl(child, opts = {}) {
+  const idea = ideaById(child.ideaId);
+  const el = document.createElement("div");
+  el.className = `child-card ${child.type} ${child.done ? "done" : ""}`;
+  el.draggable = true;
+  el.dataset.childId = child.id;
+
+  const icon = child.type === "creation" ? "assets/icon-creation.png" : "assets/icon-application.png";
+  const label = child.type === "creation" ? "Creation" : "Application";
+
+  el.innerHTML = `
+    <div class="child-head">
+      <img src="${icon}" alt="" />
+      ${label}
+      <span class="done-toggle" data-action="toggle-done" data-child="${child.id}">${child.done ? "↺" : "✓"}</span>
+      ${child.scheduledDate ? `<span class="unschedule-toggle" data-action="unschedule" data-child="${child.id}" title="Clear date — sends it back to the staging panel">⤺</span>` : ""}
+    </div>
+    ${opts.hideParent ? "" : `<div class="child-parent">${escapeHtml(idea ? idea.title : "Unknown idea")}</div>`}
+    <div class="schedule-row">
+      <label class="schedule-label">${child.scheduledDate ? "Scheduled" : "Schedule for…"}</label>
+      <input type="date" class="schedule-date-input" data-child="${child.id}" value="${child.scheduledDate || ""}" />
+    </div>
+  `;
+
+  const dateInput = el.querySelector(".schedule-date-input");
+  dateInput.addEventListener("click", (e) => e.stopPropagation());
+  dateInput.addEventListener("change", (e) => {
+    child.scheduledDate = e.target.value || null;
+    if (child.scheduledDate) child.parked = false; // a dated tile is never "parked"
+    saveToStorage();
+    render();
+  });
+
+  el.addEventListener("dragstart", (e) => {
+    dragPayload = { childId: child.id };
+    el.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+  });
+  el.addEventListener("dragend", () => {
+    el.classList.remove("dragging");
+    dragPayload = null;
+  });
+
+  return el;
+}
+
+/* ---------------------------------------------------------- */
+/* Calendar — week view and month view share one nav row;        */
+/* calendarViewMode picks which grid is visible and what the     */
+/* Prev/Next/Today buttons operate on.                           */
+/* ---------------------------------------------------------- */
+
+function renderCalendar() {
+  if (calendarViewMode === "month") {
+    document.getElementById("calendar-grid").style.display = "none";
+    document.getElementById("calendar-month-grid").style.display = "flex";
+    renderCalendarMonth();
+  } else {
+    document.getElementById("calendar-grid").style.display = "grid";
+    document.getElementById("calendar-month-grid").style.display = "none";
+    renderCalendarWeek();
+  }
+}
+
+function renderCalendarWeek() {
+  const grid = document.getElementById("calendar-grid");
+  grid.innerHTML = "";
+
+  const days = weekDays(viewWeekStart);
+  const today = new Date();
+
+  const label = `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  document.getElementById("week-label").textContent = label;
+
+  days.forEach((day) => {
+    const col = document.createElement("div");
+    col.className = "day-col" + (isSameDay(day, today) ? " today" : "");
+
+    const header = document.createElement("div");
+    header.className = "day-col-header";
+    header.innerHTML = `
+      <div class="day-name">${day.toLocaleDateString(undefined, { weekday: "short" })}</div>
+      <div class="day-date">${day.getDate()}</div>
+    `;
+    col.appendChild(header);
+
+    const dropZone = document.createElement("div");
+    dropZone.className = "day-drop-zone";
+    dropZone.dataset.date = fmtISO(day);
+
+    const dayChildren = STATE.children.filter((c) => c.scheduledDate === fmtISO(day));
+    dayChildren.forEach((child) => dropZone.appendChild(buildChildCardEl(child)));
+
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropZone.classList.add("drag-over");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      if (!dragPayload) return;
+      const child = childById(dragPayload.childId);
+      if (!child) return;
+      child.scheduledDate = dropZone.dataset.date;
+      child.parked = false; // a dated tile is never "parked"
+      saveToStorage();
+      render();
+    });
+
+    col.appendChild(dropZone);
+    grid.appendChild(col);
+  });
+}
+
+/* Month view shows compact dots rather than full cards — clicking a    */
+/* day jumps into week view for that day's week, where the full cards   */
+/* (and drag/date/unschedule controls) live.                            */
+function renderCalendarMonth() {
+  const container = document.getElementById("calendar-month-grid");
+  container.innerHTML = "";
+
+  const today = new Date();
+  const weeks = monthGridWeeks(viewMonthStart);
+
+  const label = viewMonthStart.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  document.getElementById("week-label").textContent = label;
+
+  const weekdayRow = document.createElement("div");
+  weekdayRow.className = "month-weekday-row";
+  ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((d) => {
+    const span = document.createElement("span");
+    span.textContent = d;
+    weekdayRow.appendChild(span);
+  });
+  container.appendChild(weekdayRow);
+
+  const weeksWrap = document.createElement("div");
+  weeksWrap.className = "month-weeks";
+
+  weeks.forEach((week) => {
+    const weekRow = document.createElement("div");
+    weekRow.className = "month-week-row";
+
+    week.forEach(({ date, inMonth }) => {
+      const iso = fmtISO(date);
+      const cell = document.createElement("div");
+      cell.className = "month-cell" + (inMonth ? "" : " outside-month") + (isSameDay(date, today) ? " today" : "");
+
+      const dayChildren = STATE.children.filter((c) => c.scheduledDate === iso);
+      const maxDots = 6;
+      const shown = dayChildren.slice(0, maxDots);
+      const overflowCount = dayChildren.length - shown.length;
+
+      const dotsHtml = shown
+        .map((c) => `<span class="month-dot ${c.type}${c.done ? " done" : ""}" title="${escapeHtml((ideaById(c.ideaId) || {}).title || "")}"></span>`)
+        .join("");
+
+      cell.innerHTML = `
+        <span class="month-date">${date.getDate()}</span>
+        <span class="month-dots">${dotsHtml}${overflowCount > 0 ? `<span class="month-overflow">+${overflowCount}</span>` : ""}</span>
+      `;
+
+      cell.addEventListener("click", () => {
+        viewWeekStart = startOfWeek(date);
+        calendarViewMode = "week";
+        setViewToggleUI();
+        renderCalendar();
+      });
+
+      weekRow.appendChild(cell);
+    });
+
+    weeksWrap.appendChild(weekRow);
+  });
+
+  container.appendChild(weeksWrap);
+}
+
+function setViewToggleUI() {
+  document.getElementById("btn-view-week").classList.toggle("active", calendarViewMode === "week");
+  document.getElementById("btn-view-month").classList.toggle("active", calendarViewMode === "month");
+}
+
+/* ---------------------------------------------------------- */
+/* Email backups — two flavours:                                 */
+/*  - "Calendar" : just what's currently scheduled, as a dated   */
+/*    itinerary. Useful as a quick "what's coming up" share.     */
+/*  - "Full board": every idea, every spawned child (wherever it  */
+/*    currently sits — parked, staging, or scheduled), plus a     */
+/*    compact raw-data block at the end so the board could be      */
+/*    reconstructed by hand if ever needed.                       */
+/* Both open as a mailto: link with a pre-filled subject/body,    */
+/* matching the email-snapshot pattern used across the other      */
+/* apps — no server, no account, just your own mail client.       */
+/* ---------------------------------------------------------- */
+
+function statusLabel(child) {
+  if (child.scheduledDate) return `scheduled ${child.scheduledDate}${child.done ? " — done" : ""}`;
+  if (child.parked) return "parked on idea card";
+  return "in staging, no date yet";
+}
+
+function buildCalendarEmailBody() {
+  const scheduled = STATE.children.filter((c) => c.scheduledDate);
+  scheduled.sort((a, b) => (a.scheduledDate < b.scheduledDate ? -1 : a.scheduledDate > b.scheduledDate ? 1 : 0));
+
+  const lines = [];
+  lines.push("COMMUNIC8 — CALENDAR SNAPSHOT");
+  lines.push(new Date().toLocaleString());
+  lines.push("");
+
+  if (!scheduled.length) {
+    lines.push("Nothing is currently scheduled on the calendar.");
+  } else {
+    let lastDate = null;
+    scheduled.forEach((child) => {
+      if (child.scheduledDate !== lastDate) {
+        lines.push("");
+        lines.push(`— ${child.scheduledDate} —`);
+        lastDate = child.scheduledDate;
+      }
+      const idea = ideaById(child.ideaId);
+      const typeLabel = child.type === "creation" ? "Build" : "Do";
+      const doneTag = child.done ? " [done]" : "";
+      lines.push(`  • [${typeLabel}] ${idea ? idea.title : "Unknown idea"}${doneTag}`);
+    });
   }
 
-  saveToStorage();
-  closeReasonModal();
-  render();
+  lines.push("");
+  lines.push(`Total scheduled: ${scheduled.length} (${scheduled.filter((c) => c.done).length} done)`);
+  return lines.join("\n");
+}
+
+function buildFullBoardEmailBody() {
+  const lines = [];
+  lines.push("COMMUNIC8 — FULL BOARD BACKUP");
+  lines.push(new Date().toLocaleString());
+  lines.push("");
+  lines.push(`${STATE.ideas.length} ideas, ${STATE.children.length} spawned task${STATE.children.length === 1 ? "" : "s"}`);
+  lines.push("");
+
+  STATE.categories.forEach((cat) => {
+    const ideasInCat = STATE.ideas.filter((i) => i.category === cat.id);
+    if (!ideasInCat.length) return;
+    lines.push(`=== ${cat.label} ===`);
+    ideasInCat.forEach((idea) => {
+      lines.push(`• ${idea.title}`);
+      if (idea.description) lines.push(`   ${idea.description}`);
+      const kids = STATE.children.filter((c) => c.ideaId === idea.id);
+      kids.forEach((child) => {
+        const typeLabel = child.type === "creation" ? "Build" : "Do";
+        lines.push(`   - [${typeLabel}] ${statusLabel(child)}`);
+      });
+    });
+    lines.push("");
+  });
+
+  lines.push("");
+  lines.push("---");
+  lines.push("Raw data (for backup / re-import — do not edit by hand):");
+  lines.push(JSON.stringify(STATE));
+  return lines.join("\n");
+}
+
+function openMailto(subject, body) {
+  const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  // mailto: links have practical length limits in some clients; if the body
+  // is very large (e.g. a big board with lots of history), warn rather than
+  // silently truncate, so nothing important gets lost without the person knowing.
+  if (url.length > 1800) {
+    const proceed = confirm(
+      "This backup is fairly large and some email apps may cut off long mailto links. " +
+      "It should still work in most mail clients, but if the email arrives empty or truncated, " +
+      "consider copying the board data manually instead. Open email now?"
+    );
+    if (!proceed) return;
+  }
+  window.location.href = url;
+}
+
+function wireEmailActions() {
+  document.getElementById("btn-email-calendar").addEventListener("click", () => {
+    const body = buildCalendarEmailBody();
+    openMailto("Communic8 — Calendar snapshot", body);
+  });
+  document.getElementById("btn-email-board").addEventListener("click", () => {
+    const body = buildFullBoardEmailBody();
+    openMailto("Communic8 — Full board backup", body);
+  });
+}
+
+/* dropping a card onto the canvas parks it back on its parent idea  */
+/* card — no exact spot to aim for, since a parked tile's position   */
+/* is always derived from its idea, not stored x/y.                  */
+function wireCanvasDropTarget() {
+  const canvasWrap = document.getElementById("canvas-wrap");
+  canvasWrap.addEventListener("dragover", (e) => e.preventDefault());
+  canvasWrap.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (!dragPayload) return;
+    const child = childById(dragPayload.childId);
+    if (!child) return;
+    child.scheduledDate = null;
+    child.parked = true;
+    saveToStorage();
+    render();
+  });
 }
 
 /* ---------------------------------------------------------- */
-/* Add a brand-new activity (from picker or manage modal)        */
+/* Event delegation for buttons rendered dynamically             */
 /* ---------------------------------------------------------- */
 
-function addActivity(label) {
-  const trimmed = label.trim();
-  if (!trimmed) return null;
-  const usedColors = STATE.activities.map((a) => a.color);
-  const color = PALETTE.find((c) => !usedColors.includes(c)) || PALETTE[STATE.activities.length % PALETTE.length];
-  const activity = { id: "a_" + Date.now(), label: trimmed, color };
-  STATE.activities.push(activity);
-  saveToStorage();
-  return activity;
-}
+document.addEventListener("click", (e) => {
+  const spawnBtn = e.target.closest("[data-action='spawn-creation'], [data-action='spawn-application']");
+  if (spawnBtn) {
+    const ideaId = spawnBtn.dataset.idea;
+    const type = spawnBtn.dataset.action === "spawn-creation" ? "creation" : "application";
+    spawnChild(ideaId, type);
+    return;
+  }
 
-/* ---------------------------------------------------------- */
-/* Manage activities modal                                       */
-/* ---------------------------------------------------------- */
-
-function openManageModal() {
-  renderManageList();
-  document.getElementById("new-activity-input-2").value = "";
-  document.getElementById("manage-overlay").classList.add("open");
-}
-
-function renderManageList() {
-  const list = document.getElementById("manage-list");
-  list.innerHTML = "";
-  STATE.activities.forEach((activity) => {
-    const row = document.createElement("div");
-    row.className = "manage-row";
-    row.innerHTML = `
-      <span class="dot" style="background:${colorHex(activity.color)};"></span>
-      <span class="name">${escapeHtml(activity.label)}</span>
-      <span class="remove-activity" title="Remove from your pool">✕</span>
-    `;
-    row.querySelector(".remove-activity").addEventListener("click", () => {
-      STATE.activities = STATE.activities.filter((a) => a.id !== activity.id);
+  const toggleBtn = e.target.closest("[data-action='toggle-done']");
+  if (toggleBtn) {
+    const child = childById(toggleBtn.dataset.child);
+    if (child) {
+      child.done = !child.done;
       saveToStorage();
-      renderManageList();
-    });
-    list.appendChild(row);
-  });
-}
+      render();
+    }
+    return;
+  }
+
+  const unscheduleBtn = e.target.closest("[data-action='unschedule']");
+  if (unscheduleBtn) {
+    const child = childById(unscheduleBtn.dataset.child);
+    if (child) {
+      child.scheduledDate = null;
+      child.parked = false; // unscheduling sends it to the staging panel, matching its tooltip
+      saveToStorage();
+      render();
+    }
+    return;
+  }
+});
 
 /* ---------------------------------------------------------- */
-/* Wiring                                                         */
+/* Toolbar interactions                                          */
 /* ---------------------------------------------------------- */
 
-function wireUI() {
-  document.getElementById("btn-cancel-picker").addEventListener("click", closePicker);
+function wireToolbar() {
+  document.getElementById("search").addEventListener("input", renderCanvas);
 
-  document.getElementById("btn-add-activity").addEventListener("click", () => {
-    const input = document.getElementById("new-activity-input");
-    const activity = addActivity(input.value);
-    if (activity) {
-      input.value = "";
-      renderActivityList();
+  document.getElementById("btn-view-week").addEventListener("click", () => {
+    // if we navigated the month view away from today, landing back on an
+    // unrelated week would be just as confusing as the month-sync issue
+    // above -- so default to the first week of whatever month was shown,
+    // unless today actually falls within it.
+    const today = new Date();
+    if (calendarViewMode === "month") {
+      viewWeekStart =
+        today.getFullYear() === viewMonthStart.getFullYear() && today.getMonth() === viewMonthStart.getMonth()
+          ? startOfWeek(today)
+          : startOfWeek(viewMonthStart);
     }
+    calendarViewMode = "week";
+    setViewToggleUI();
+    renderCalendar();
   });
-  document.getElementById("new-activity-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") document.getElementById("btn-add-activity").click();
+  document.getElementById("btn-view-month").addEventListener("click", () => {
+    // land on whichever month the currently-viewed week falls in, so
+    // switching views doesn't jump you somewhere unrelated to what you
+    // were just looking at.
+    viewMonthStart = startOfMonth(viewWeekStart);
+    calendarViewMode = "month";
+    setViewToggleUI();
+    renderCalendar();
   });
 
-  document.getElementById("btn-cancel-reason").addEventListener("click", closeReasonModal);
-  document.getElementById("reason-text").addEventListener("input", (e) => {
-    document.getElementById("btn-confirm-reason").disabled = !e.target.value.trim();
-  });
-  document.getElementById("btn-confirm-reason").addEventListener("click", confirmReason);
-
-  document.getElementById("manage-link").addEventListener("click", openManageModal);
-  document.getElementById("btn-close-manage").addEventListener("click", () => {
-    document.getElementById("manage-overlay").classList.remove("open");
-    render(); // in case activities were removed, refresh stones/history labels
-  });
-  document.getElementById("btn-add-activity-2").addEventListener("click", () => {
-    const input = document.getElementById("new-activity-input-2");
-    const activity = addActivity(input.value);
-    if (activity) {
-      input.value = "";
-      renderManageList();
+  document.getElementById("btn-prev-week").addEventListener("click", () => {
+    if (calendarViewMode === "month") {
+      viewMonthStart = startOfMonth(new Date(viewMonthStart.getFullYear(), viewMonthStart.getMonth() - 1, 1));
+    } else {
+      viewWeekStart.setDate(viewWeekStart.getDate() - 7);
     }
+    renderCalendar();
   });
-  document.getElementById("new-activity-input-2").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") document.getElementById("btn-add-activity-2").click();
+  document.getElementById("btn-next-week").addEventListener("click", () => {
+    if (calendarViewMode === "month") {
+      viewMonthStart = startOfMonth(new Date(viewMonthStart.getFullYear(), viewMonthStart.getMonth() + 1, 1));
+    } else {
+      viewWeekStart.setDate(viewWeekStart.getDate() + 7);
+    }
+    renderCalendar();
+  });
+  document.getElementById("btn-today").addEventListener("click", () => {
+    viewWeekStart = startOfWeek(new Date());
+    viewMonthStart = startOfMonth(new Date());
+    renderCalendar();
   });
 
-  // close modals on overlay background click (not when clicking the modal itself)
-  [
-    ["picker-overlay", closePicker],
-    ["reason-overlay", closeReasonModal],
-    ["manage-overlay", () => document.getElementById("manage-overlay").classList.remove("open")],
-  ].forEach(([id, closeFn]) => {
-    document.getElementById(id).addEventListener("click", (e) => {
-      if (e.target.id === id) closeFn();
+  /* Divider drag-to-resize between canvas and the staging/calendar area below */
+  const divider = document.getElementById("divider");
+  const canvasWrap = document.getElementById("canvas-wrap");
+  const stagingWrap = document.getElementById("staging-wrap");
+  const calendarWrap = document.getElementById("calendar-wrap");
+  let resizing = false;
+
+  divider.addEventListener("mousedown", (e) => {
+    resizing = true;
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!resizing) return;
+    const splitRect = document.getElementById("main-split").getBoundingClientRect();
+    const fromTop = e.clientY - splitRect.top;
+    const stagingH = stagingWrap.getBoundingClientRect().height;
+    const minH = 140;
+    const maxH = splitRect.height - minH - stagingH - 60; // leave room for staging panel + calendar
+    const clamped = Math.max(minH, Math.min(maxH, fromTop));
+    canvasWrap.style.flex = `0 0 ${clamped}px`;
+    calendarWrap.style.flex = `1 1 auto`;
+  });
+  window.addEventListener("mouseup", () => (resizing = false));
+
+  /* Modal: add new idea */
+  const overlay = document.getElementById("modal-overlay");
+  const catSelect = document.getElementById("modal-category");
+
+  document.getElementById("btn-add-idea").addEventListener("click", () => {
+    catSelect.innerHTML = STATE.categories.map((c) => `<option value="${c.id}">${escapeHtml(c.label)}</option>`).join("");
+    document.getElementById("modal-title").value = "";
+    document.getElementById("modal-desc").value = "";
+    overlay.classList.add("open");
+  });
+
+  document.getElementById("btn-cancel-modal").addEventListener("click", () => {
+    overlay.classList.remove("open");
+  });
+
+  document.getElementById("btn-save-idea").addEventListener("click", () => {
+    const title = document.getElementById("modal-title").value.trim();
+    if (!title) return;
+    const id = "custom_" + Date.now();
+    const categoryId = catSelect.value;
+    STATE.ideas.push({
+      id,
+      category: categoryId,
+      title,
+      description: document.getElementById("modal-desc").value.trim(),
     });
+
+    // place new card near its category cluster, with slight randomness
+    const bounds = clusterBounds();
+    const b = bounds[categoryId];
+    STATE.canvasPositions[id] = b
+      ? { x: b.x + 20 + Math.random() * 40, y: b.y + b.h + 10 }
+      : { x: 80 + Math.random() * 200, y: 80 + Math.random() * 200 };
+
+    saveToStorage();
+    overlay.classList.remove("open");
+    render();
   });
 }
 
@@ -544,20 +907,28 @@ function wireUI() {
 /* ---------------------------------------------------------- */
 
 function init() {
-  wireUI();
+  wireCanvasDropTarget();
+  wireStagingDropTarget();
+  wireToolbar();
+  wireCanvasDragController();
+  wireEmailActions();
   boot();
 }
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
+  // DOM is already parsed (script is at end of body) — run immediately
   init();
 }
 
 /* ---------------------------------------------------------- */
 /* PWA service worker registration                               */
-/* Only works over https:// (or localhost) — silently does       */
-/* nothing on file://, which is expected.                        */
+/* Only works over https:// (or localhost) — browsers block       */
+/* service workers on file:// for security reasons, so this        */
+/* silently does nothing when opened as a local file. That's       */
+/* expected: the app still works fine locally, it just won't be    */
+/* installable as a home-screen app until it's hosted.             */
 /* ---------------------------------------------------------- */
 
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {

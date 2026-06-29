@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Do — Three a Day</title>
+<title>Communic8 — Marketing &amp; Sales Board</title>
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#7A9B7E" />
 <link rel="icon" type="image/png" href="assets/app-icon-192.png" />
@@ -24,13 +24,16 @@
     --clay-dark:  #8A4F36;
     --clay-tint:  #F3E3DA;
 
-    --amber:      #D9A441;
-    --amber-tint: #FBF1DC;
-    --amber-dark: #8A6418;
+    --coral:      #E07A6F; --coral-tint: #FBEAE7;
+    --amber:      #D9A441; --amber-tint: #FBF1DC;
+    --teal:       #4D8C8C; --teal-tint:  #E2EFEF;
+    --blue:       #5A7FB5; --blue-tint:  #E4EBF5;
+    --gray:       #8C8C8C; --gray-tint:  #ECECEC;
+    --purple:     #8C6FB0; --purple-tint:#EEE6F5;
+    --green:      #6FA15A; --green-tint: #E9F1E3;
+    --pink:       #C97DA0; --pink-tint:  #F6E6EE;
 
-    --gray-tint:  #ECECEC;
-
-    --shadow:      0 1px 2px rgba(31,41,55,0.06), 0 2px 8px rgba(31,41,55,0.06);
+    --shadow: 0 1px 2px rgba(31,41,55,0.06), 0 2px 8px rgba(31,41,55,0.06);
     --shadow-lift: 0 6px 20px rgba(31,41,55,0.16);
 
     --serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
@@ -47,263 +50,63 @@
     color: var(--ink);
     font-family: var(--sans);
     height: 100%;
+    overflow: hidden;
   }
 
   #app {
-    max-width: 720px;
-    margin: 0 auto;
-    min-height: 100vh;
     display: flex;
     flex-direction: column;
+    height: 100vh;
   }
 
   /* ── Header ─────────────────────────────────────────────── */
   header {
-    padding: 28px 24px 18px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  header .top-row {
+    flex: 0 0 auto;
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+    padding: 18px 28px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
   }
+
+  header .title-block { display: flex; align-items: baseline; gap: 12px; }
 
   header h1 {
     font-family: var(--serif);
     font-weight: 600;
-    font-size: 26px;
+    font-size: 22px;
     margin: 0;
+    color: var(--ink);
     letter-spacing: 0.2px;
   }
 
-  header .today-label {
+  header .subtitle {
     font-size: 13px;
     color: var(--ink-soft);
     font-style: italic;
-    margin-top: 2px;
   }
 
-  .streak-badge {
+  header .stats {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
+    gap: 18px;
     font-family: var(--mono);
-    font-size: 13px;
-    color: var(--ink-soft);
-    background: var(--sage-tint);
-    border: 1px solid var(--sage);
-    border-radius: 20px;
-    padding: 5px 12px;
-    white-space: nowrap;
-  }
-  .streak-badge b { color: var(--sage-dark); font-size: 15px; }
-
-  /* ── The three stones (signature element) ─────────────────── */
-  #stones-section {
-    padding: 32px 24px 8px;
-  }
-
-  #stones-row {
-    display: flex;
-    gap: 16px;
-  }
-
-  .stone {
-    flex: 1;
-    position: relative;
-    aspect-ratio: 1 / 1.08;
-    border-radius: 16px;
-    background: var(--paper);
-    border: 1.5px solid var(--line);
-    box-shadow: var(--shadow);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 14px 10px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.18s, box-shadow 0.18s, transform 0.12s;
-  }
-  .stone:hover { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
-
-  .stone .stone-number {
-    position: absolute;
-    top: 10px;
-    left: 12px;
-    font-family: var(--serif);
-    font-style: italic;
-    font-size: 13px;
-    color: var(--ink-soft);
-    opacity: 0.55;
-  }
-
-  .stone.empty {
-    border-style: dashed;
-    border-color: var(--line);
-  }
-  .stone.empty .stone-cta {
-    font-family: var(--serif);
-    font-size: 14px;
-    color: var(--ink-soft);
-    font-style: italic;
-  }
-  .stone.empty .stone-plus {
-    font-size: 26px;
-    color: var(--ink-soft);
-    line-height: 1;
-    margin-bottom: 4px;
-    font-weight: 300;
-  }
-
-  .stone.active {
-    border-color: var(--sage);
-    background: var(--sage-tint);
-  }
-  .stone.active .stone-activity {
-    font-family: var(--serif);
-    font-weight: 600;
-    font-size: 16px;
-    color: var(--sage-dark);
-    line-height: 1.25;
-    margin-bottom: 10px;
-  }
-
-  .stone.done {
-    border-color: var(--sage-dark);
-    background: var(--sage);
-  }
-  .stone.done .stone-activity {
-    font-family: var(--serif);
-    font-weight: 600;
-    font-size: 16px;
-    color: white;
-    line-height: 1.25;
-    margin-bottom: 8px;
-    text-decoration: line-through;
-    text-decoration-thickness: 1.5px;
-    text-decoration-color: rgba(255,255,255,0.6);
-  }
-  .stone.done .stone-check {
-    font-size: 22px;
-    color: white;
-  }
-
-  .stone-mark-done {
-    margin-top: 2px;
-    font-family: var(--sans);
-    font-size: 11px;
-    font-weight: 600;
-    border: 1px solid var(--sage-dark);
-    background: var(--paper);
-    color: var(--sage-dark);
-    border-radius: 7px;
-    padding: 4px 10px;
-    cursor: pointer;
-  }
-  .stone-mark-done:hover { background: var(--sage-dark); color: white; }
-
-  .stone-cancel {
-    position: absolute;
-    top: 8px;
-    right: 9px;
-    font-size: 13px;
-    color: var(--ink-soft);
-    opacity: 0.5;
-    cursor: pointer;
-    padding: 2px;
-    line-height: 1;
-  }
-  .stone-cancel:hover { opacity: 1; color: var(--clay-dark); }
-
-  #stones-hint {
-    text-align: center;
     font-size: 12px;
     color: var(--ink-soft);
-    font-style: italic;
-    margin-top: 12px;
   }
 
-  /* ── Activity picker modal ──────────────────────────────── */
-  #picker-overlay, #reason-overlay, #manage-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(31,41,55,0.35);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-    padding: 20px;
-  }
-  #picker-overlay.open, #reason-overlay.open, #manage-overlay.open { display: flex; }
+  header .stats b { color: var(--ink); font-weight: 600; }
 
-  .modal {
-    background: var(--paper);
-    border-radius: 14px;
-    padding: 22px 24px;
-    width: 100%;
-    max-width: 400px;
-    box-shadow: var(--shadow-lift);
-    max-height: 80vh;
-    overflow-y: auto;
-  }
-  .modal h2 {
-    font-family: var(--serif);
-    font-size: 18px;
-    margin: 0 0 6px;
-  }
-  .modal .modal-sub {
-    font-size: 12.5px;
-    color: var(--ink-soft);
-    margin: 0 0 16px;
-  }
-
-  #activity-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-  .activity-option {
+  /* ── Toolbar ────────────────────────────────────────────── */
+  #toolbar {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     gap: 10px;
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    padding: 10px 12px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    background: var(--paper);
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .activity-option:hover { background: var(--sage-tint); border-color: var(--sage); }
-  .activity-option .dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    flex: 0 0 auto;
-  }
-
-  .modal-divider {
-    border: none;
-    border-top: 1px solid var(--line);
-    margin: 14px 0;
-  }
-
-  #new-activity-row {
-    display: flex;
-    gap: 8px;
-  }
-  #new-activity-input {
-    flex: 1;
-    font-family: var(--sans);
-    font-size: 13px;
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    padding: 8px 10px;
-    background: var(--paper);
-    color: var(--ink);
+    padding: 10px 28px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-dim);
+    flex-wrap: wrap;
   }
 
   .btn {
@@ -313,7 +116,7 @@
     border: 1px solid var(--line);
     background: var(--paper);
     color: var(--ink);
-    padding: 7px 14px;
+    padding: 6px 14px;
     border-radius: 7px;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
@@ -321,232 +124,780 @@
   .btn:hover { background: var(--sage-tint); border-color: var(--sage); }
   .btn.primary { background: var(--sage); color: white; border-color: var(--sage-dark); }
   .btn.primary:hover { background: var(--sage-dark); }
-  .btn.warn { background: var(--clay-tint); color: var(--clay-dark); border-color: var(--clay); }
-  .btn.warn:hover { background: var(--clay); color: white; }
-  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-  .modal-actions {
+  #search {
+    font-family: var(--sans);
+    font-size: 13px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    padding: 6px 12px;
+    border-radius: 7px;
+    width: 220px;
+    color: var(--ink);
+  }
+  #search:focus { outline: none; border-color: var(--sage); }
+
+  .toolbar-spacer { flex: 1; }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .legend-dot.creation { background: var(--sage); }
+  .legend-dot.application { background: var(--clay); }
+
+  #email-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: 14px;
+    padding-left: 14px;
+    border-left: 1px solid var(--line);
+  }
+  #email-actions .btn {
+    font-size: 12px;
+    padding: 6px 11px;
+  }
+
+  /* ── Main split: canvas (top) / calendar (bottom) ──────────── */
+  #main-split {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  #canvas-wrap {
+    flex: 1 1 55%;
+    min-height: 180px;
+    position: relative;
+    overflow: auto;
+    background:
+      radial-gradient(circle at 1px 1px, rgba(31,41,55,0.05) 1px, transparent 0) 0 0/22px 22px,
+      var(--paper);
+  }
+
+  #canvas {
+    position: relative;
+    width: 2300px;
+    height: 1850px;
+  }
+
+  .cluster-halo {
+    position: absolute;
+    border-radius: 40px;
+    pointer-events: none;
+    opacity: 0.55;
+  }
+
+  .cluster-label {
+    position: absolute;
+    font-family: var(--serif);
+    font-size: 13px;
+    font-style: italic;
+    color: var(--ink-soft);
+    pointer-events: none;
+    padding: 2px 6px;
+  }
+
+  /* divider between canvas and staging panel */
+  #divider {
+    flex: 0 0 auto;
+    height: 10px;
+    background: var(--paper-dim);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    cursor: row-resize;
+    position: relative;
+  }
+  #divider::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 50px;
+    height: 3px;
+    background: var(--line);
+    border-radius: 2px;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ── Staging panel (between canvas and calendar) ───────────── */
+  /* Holds spawned creation/application tiles that don't yet have  */
+  /* a scheduledDate — their "waiting room" before the calendar.   */
+  /* flex-basis is auto and grows with content (a full child-card  */
+  /* is ~110-140px tall); min/max-height bound it but never clip a */
+  /* card, since a clipped card is an unreachable drop target.     */
+  #staging-wrap {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: var(--paper-dim);
+    border-bottom: 1px solid var(--line);
+    min-height: 150px;
+    max-height: 280px;
+  }
+
+  #staging-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 8px 20px 6px;
+  }
+
+  #staging-header .staging-title {
+    font-family: var(--serif);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  #staging-header .staging-hint {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  #staging-row {
+    flex: 1 1 auto;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 0 20px 14px;
+    overflow-x: auto;
+    overflow-y: auto;
+    min-height: 64px;
+  }
+
+  #staging-row.drag-over {
+    background: var(--sage-tint);
+  }
+
+  #staging-empty {
+    font-size: 12px;
+    color: var(--ink-soft);
+    font-style: italic;
+    padding: 6px 2px 10px;
+  }
+
+  #staging-row .child-card {
+    flex: 0 0 auto;
+    width: 210px;
+  }
+
+  /* ── Calendar ───────────────────────────────────────────── */
+  #calendar-wrap {
+    flex: 1 1 45%;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    background: var(--paper);
+    overflow: hidden;
+  }
+
+  #calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+  }
+
+  #calendar-header .week-label {
+    font-family: var(--serif);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  #calendar-nav { display: flex; gap: 6px; align-items: center; }
+  #calendar-nav .btn { padding: 4px 10px; font-size: 12px; }
+
+  #view-toggle {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    overflow: hidden;
+    margin-right: 4px;
+  }
+  .view-toggle-btn {
+    border: none;
+    border-radius: 0;
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+  .view-toggle-btn:hover { background: var(--sage-tint); }
+  .view-toggle-btn.active {
+    background: var(--sage);
+    color: white;
+  }
+  .view-toggle-btn.active:hover { background: var(--sage-dark); }
+
+  #calendar-grid {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .day-col {
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  .day-col:last-child { border-right: none; }
+
+  .day-col-header {
+    flex: 0 0 auto;
+    padding: 8px 10px 6px;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-dim);
+    position: sticky;
+    top: 0;
+  }
+
+  .day-name {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .day-date {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .day-col.today .day-col-header { background: var(--sage-tint); }
+
+  .day-drop-zone {
+    flex: 1 1 auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 90px;
+  }
+  .day-drop-zone.drag-over {
+    background: var(--sage-tint);
+    outline: 2px dashed var(--sage);
+    outline-offset: -4px;
+  }
+
+  /* ── Month view ─────────────────────────────────────────── */
+  #calendar-month-grid {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .month-weekday-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-dim);
+    position: sticky;
+    top: 0;
+  }
+  .month-weekday-row span {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 6px 8px;
+    text-align: left;
+  }
+
+  .month-weeks {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .month-week-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    flex: 1 1 auto;
+    min-height: 78px;
+  }
+
+  .month-cell {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 5px 6px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: background 0.12s;
+  }
+  .month-cell:hover { background: var(--sage-tint); }
+  .month-cell:nth-child(7n) { border-right: none; }
+  .month-cell.outside-month { opacity: 0.4; }
+  .month-cell.today { background: var(--sage-tint); }
+
+  .month-cell .month-date {
+    font-family: var(--serif);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    flex: 0 0 auto;
+  }
+
+  .month-cell .month-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+  .month-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+  .month-dot.creation { background: var(--sage); }
+  .month-dot.application { background: var(--clay); }
+  .month-dot.done { opacity: 0.4; }
+
+  .month-cell .month-overflow {
+    font-size: 10px;
+    color: var(--ink-soft);
+    font-family: var(--mono);
+  }
+
+
+
+  /* ── Idea cards (canvas) ────────────────────────────────── */
+  .idea-card {
+    position: absolute;
+    width: 190px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 10px 12px;
+    cursor: grab;
+    user-select: none;
+    transition: box-shadow 0.15s, transform 0.1s;
+  }
+  .idea-card:hover { box-shadow: var(--shadow-lift); }
+  .idea-card.dragging { opacity: 0.5; }
+
+  .idea-card .cat-tag {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.75;
+    margin-bottom: 4px;
+    display: inline-block;
+  }
+
+  .idea-card .idea-title {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 1.3;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  .idea-card .idea-desc {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    line-height: 1.35;
+    margin-bottom: 6px;
+  }
+
+  .idea-card .spawn-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .spawn-btn {
+    flex: 1;
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .spawn-btn img { width: 12px; height: 12px; }
+  .spawn-btn.creation { background: var(--sage-tint); color: var(--sage-dark); }
+  .spawn-btn.creation:hover { background: var(--sage); color: white; }
+  .spawn-btn.application { background: var(--clay-tint); color: var(--clay-dark); }
+  .spawn-btn.application:hover { background: var(--clay); color: white; }
+  .spawn-btn.spawned { opacity: 0.45; cursor: default; }
+
+  /* ── Child cards (creation / application) ──────────────── */
+  .child-card {
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-size: 11.5px;
+    cursor: grab;
+    border: 1px solid transparent;
+    box-shadow: var(--shadow);
+    background: var(--paper);
+    user-select: none;
+  }
+  .child-card.dragging { opacity: 0.4; }
+  .child-card .child-head {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .child-card .child-head img { width: 11px; height: 11px; }
+  .child-card .child-parent {
+    font-size: 10px;
+    opacity: 0.7;
+    line-height: 1.25;
+  }
+
+  .child-card.creation { background: var(--sage-tint); border-color: var(--sage); color: var(--sage-dark); }
+  .child-card.application { background: var(--clay-tint); border-color: var(--clay); color: var(--clay-dark); }
+
+  .child-card.done {
+    background: var(--gray-tint) !important;
+    border-color: var(--line) !important;
+    color: var(--ink-soft) !important;
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  .child-card .done-toggle {
+    float: right;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 6px;
+  }
+
+  .child-card .unschedule-toggle {
+    float: right;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 6px;
+    opacity: 0.75;
+  }
+  .child-card .unschedule-toggle:hover { opacity: 1; }
+
+  .child-card .schedule-row {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(31,41,55,0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  .child-card .schedule-label {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+  }
+  .child-card .schedule-date-input {
+    font-family: var(--sans);
+    font-size: 11px;
+    border: 1px solid currentColor;
+    border-radius: 5px;
+    padding: 2px 4px;
+    background: var(--paper);
+    color: inherit;
+    width: 100%;
+    max-width: 130px;
+    cursor: pointer;
+  }
+
+  /* unscheduled creation/application chips embedded right on their   */
+  /* parent idea card — this is their "home" when not on the calendar */
+  .idea-card .idea-children {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .idea-card .idea-children .child-card {
+    width: 100%;
+  }
+
+  /* ── Modal for adding a new idea ───────────────────────── */
+  #modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(31,41,55,0.35);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  #modal-overlay.open { display: flex; }
+
+  #modal {
+    background: var(--paper);
+    border-radius: 14px;
+    padding: 22px 24px;
+    width: 380px;
+    box-shadow: var(--shadow-lift);
+  }
+  #modal h2 {
+    font-family: var(--serif);
+    font-size: 17px;
+    margin: 0 0 14px;
+  }
+  #modal label {
+    font-size: 12px;
+    color: var(--ink-soft);
+    display: block;
+    margin: 10px 0 4px;
+  }
+  #modal input, #modal select, #modal textarea {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 13px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 9px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  #modal textarea { resize: vertical; min-height: 50px; }
+  #modal .modal-actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
     margin-top: 16px;
   }
 
-  #reason-overlay textarea {
-    width: 100%;
-    font-family: var(--sans);
-    font-size: 13.5px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px 12px;
-    min-height: 90px;
-    resize: vertical;
-    background: var(--paper);
-    color: var(--ink);
-  }
-  #reason-activity-name {
-    font-family: var(--serif);
-    font-weight: 600;
-    color: var(--clay-dark);
-  }
-
-  /* ── History / streak section ──────────────────────────── */
-  #history-section {
-    padding: 28px 24px 40px;
-    flex: 1;
-  }
-
-  #history-section h2 {
-    font-family: var(--serif);
-    font-size: 16px;
-    margin: 0 0 14px;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-  }
-
-  #manage-link {
-    font-family: var(--sans);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ink-soft);
-    cursor: pointer;
-    text-decoration: underline;
-    text-decoration-color: var(--line);
-  }
-  #manage-link:hover { color: var(--sage-dark); }
-
-  .day-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--line);
-  }
-  .day-row:last-child { border-bottom: none; }
-
-  .day-row .day-date {
-    font-family: var(--mono);
-    font-size: 11.5px;
-    color: var(--ink-soft);
-    width: 76px;
-    flex: 0 0 auto;
-  }
-
-  .day-row .day-dots {
-    display: flex;
-    gap: 5px;
-    flex: 0 0 auto;
-  }
-  .day-dot {
-    width: 9px; height: 9px;
-    border-radius: 50%;
-    background: var(--gray-tint);
-    border: 1px solid var(--line);
-  }
-  .day-dot.done { background: var(--sage); border-color: var(--sage-dark); }
-  .day-dot.cancelled { background: var(--clay-tint); border-color: var(--clay); }
-
-  .day-row .day-summary {
-    font-size: 12.5px;
-    color: var(--ink-soft);
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  #history-empty {
-    font-size: 13px;
-    color: var(--ink-soft);
-    font-style: italic;
-  }
-
-  /* ── Log entries detail (cancel/substitute reasons) ───────── */
-  .log-entry-wrap {
-    padding: 2px 0 8px;
-  }
-  .log-entry {
-    font-size: 11.5px;
-    color: var(--ink-soft);
-    padding: 6px 0 6px 18px;
-    border-left: 2px solid var(--clay-tint);
-    margin-top: 4px;
-  }
-  .log-entry b { color: var(--clay-dark); font-weight: 600; }
-
-  /* ── Manage activities modal ──────────────────────────────── */
-  #manage-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 14px;
-  }
-  .manage-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    padding: 8px 12px;
-  }
-  .manage-row .dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    flex: 0 0 auto;
-  }
-  .manage-row span.name { flex: 1; font-size: 13.5px; font-weight: 500; }
-  .manage-row .remove-activity {
-    font-size: 13px;
-    color: var(--ink-soft);
-    opacity: 0.5;
-    cursor: pointer;
-    padding: 2px 4px;
-  }
-  .manage-row .remove-activity:hover { opacity: 1; color: var(--clay-dark); }
-
-  ::-webkit-scrollbar { width: 9px; }
+  /* scrollbar polish */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-soft); }
+
+  /* ── Mobile: normal scrolling page instead of fixed app-shell ──── */
+  /* Desktop uses a fixed-height, no-scroll shell with internal panes  */
+  /* sized by JS-driven flex-basis (the divider drag). On a phone      */
+  /* there's no room for canvas + staging + calendar to all fit at a   */
+  /* usable size at once, so below this width we drop the fixed       */
+  /* height/overflow entirely and let each section take its natural   */
+  /* height, stacked in one normal scrolling page.                    */
+  @media (max-width: 768px) {
+    html, body {
+      height: auto;
+      overflow: visible;
+    }
+
+    #app {
+      height: auto;
+      min-height: 100vh;
+    }
+
+    header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 16px 18px 12px;
+    }
+    header .stats {
+      flex-wrap: wrap;
+      gap: 10px 16px;
+    }
+
+    #toolbar {
+      padding: 10px 18px;
+    }
+    #search { width: 100%; }
+    .toolbar-spacer { flex: 0 0 100%; height: 0; }
+    .legend { width: 100%; justify-content: flex-start; }
+    #email-actions {
+      width: 100%;
+      margin-left: 0;
+      padding-left: 0;
+      border-left: none;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      margin-top: 4px;
+    }
+
+    #main-split {
+      flex: 1 1 auto;
+      display: block; /* stop being a flex column with computed pane heights */
+      height: auto;
+      overflow: visible;
+    }
+
+    #canvas-wrap {
+      flex: none !important; /* override any inline px height set by the desktop divider-drag JS */
+      height: 60vh;
+      min-height: 320px;
+      max-height: none;
+    }
+
+    /* the divider is a desktop-only drag-to-resize handle between two */
+    /* internally-scrolling panes; that interaction doesn't apply once  */
+    /* sections stack and scroll with the page, so hide it on mobile.   */
+    #divider {
+      display: none;
+    }
+
+    #staging-wrap {
+      flex: none !important;
+      min-height: 0;
+      max-height: none;
+    }
+    #staging-row {
+      flex-wrap: wrap;
+      overflow-x: visible;
+      overflow-y: visible;
+    }
+    #staging-row .child-card {
+      width: 100%;
+    }
+
+    #calendar-wrap {
+      flex: none !important;
+      min-height: 0;
+      height: auto;
+    }
+    #calendar-grid {
+      /* day columns side-by-side become unreadably thin on a phone; */
+      /* stack the week as 7 full-width rows instead, each tall      */
+      /* enough to actually show its cards without being clipped.   */
+      display: block;
+      overflow-y: visible;
+    }
+    .day-col {
+      border-right: none;
+      border-bottom: 1px solid var(--line);
+      min-height: 0;
+    }
+    .day-col:last-child { border-bottom: none; }
+    .day-col-header {
+      position: static;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 10px 14px 8px;
+    }
+    .day-drop-zone {
+      min-height: 56px;
+      padding: 6px 14px 14px;
+    }
+
+    /* month view stays a real grid on mobile (it's compact dots, not  */
+    /* full cards), just with tighter cells and no hover affordance.   */
+    .month-week-row { min-height: 58px; }
+    .month-cell { padding: 4px 4px; }
+    .month-weekday-row span { padding: 5px 4px; font-size: 9px; }
+    #calendar-header {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    #calendar-nav { flex-wrap: wrap; gap: 6px; }
+  }
 </style>
 </head>
+
+
 <body>
 
 <div id="app">
 
   <header>
-    <div class="top-row">
-      <div>
-        <h1>Do</h1>
-        <div class="today-label" id="today-label"></div>
-      </div>
-      <div class="streak-badge" id="streak-badge"></div>
+    <div class="title-block">
+      <h1>Communic8 — Marketing &amp; Sales Board</h1>
+      <span class="subtitle">everything you could try, held loosely</span>
     </div>
+    <div class="stats" id="header-stats"></div>
   </header>
 
-  <section id="stones-section">
-    <div id="stones-row"></div>
-    <div id="stones-hint">Three, no more. Choose with intent.</div>
-  </section>
+  <div id="toolbar">
+    <button class="btn primary" id="btn-add-idea">+ New idea</button>
+    <input id="search" type="text" placeholder="Filter ideas…" />
+    <div class="toolbar-spacer"></div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot creation"></span> Creation</span>
+      <span class="legend-item"><span class="legend-dot application"></span> Application</span>
+    </div>
+    <div id="email-actions">
+      <button class="btn" id="btn-email-calendar" title="Email what's currently on the calendar">✉ Calendar</button>
+      <button class="btn" id="btn-email-board" title="Email a full backup of the whole board">✉ Full board</button>
+    </div>
+  </div>
 
-  <section id="history-section">
-    <h2>
-      <span>Past days</span>
-      <span id="manage-link">Manage activities</span>
-    </h2>
-    <div id="history-list"></div>
-  </section>
+  <div id="main-split">
+    <div id="canvas-wrap">
+      <div id="canvas"></div>
+    </div>
+
+    <div id="divider"></div>
+
+    <div id="staging-wrap">
+      <div id="staging-header">
+        <span class="staging-title">In motion — pick a date</span>
+        <span class="staging-hint">drag to the calendar, or set a date below</span>
+      </div>
+      <div id="staging-row"></div>
+    </div>
+
+    <div id="calendar-wrap">
+      <div id="calendar-header">
+        <div class="week-label" id="week-label">This week</div>
+        <div id="calendar-nav">
+          <div id="view-toggle">
+            <button class="btn view-toggle-btn active" id="btn-view-week">Week</button>
+            <button class="btn view-toggle-btn" id="btn-view-month">Month</button>
+          </div>
+          <button class="btn" id="btn-prev-week">‹ Prev</button>
+          <button class="btn" id="btn-today">Today</button>
+          <button class="btn" id="btn-next-week">Next ›</button>
+        </div>
+      </div>
+      <div id="calendar-grid"></div>
+      <div id="calendar-month-grid" style="display:none;"></div>
+    </div>
+  </div>
 
 </div>
 
-<!-- Pick an activity for an empty stone -->
-<div id="picker-overlay">
-  <div class="modal">
-    <h2 id="picker-title">Choose your task</h2>
-    <p class="modal-sub" id="picker-sub">Pick one of your key empowering activities.</p>
-    <div id="activity-list"></div>
-    <hr class="modal-divider" />
-    <label style="font-size:12px; color:var(--ink-soft); display:block; margin-bottom:6px;">Add a new activity</label>
-    <div id="new-activity-row">
-      <input id="new-activity-input" type="text" placeholder="e.g. Cold outreach" />
-      <button class="btn" id="btn-add-activity">Add</button>
-    </div>
+<div id="modal-overlay">
+  <div id="modal">
+    <h2>Add a new idea</h2>
+    <label>Category</label>
+    <select id="modal-category"></select>
+    <label>Title</label>
+    <input id="modal-title" type="text" placeholder="e.g. Send a voice note to 3 old clients" />
+    <label>Description (optional)</label>
+    <textarea id="modal-desc" placeholder="A line or two of context…"></textarea>
     <div class="modal-actions">
-      <button class="btn" id="btn-cancel-picker">Cancel</button>
+      <button class="btn" id="btn-cancel-modal">Cancel</button>
+      <button class="btn primary" id="btn-save-idea">Add idea</button>
     </div>
   </div>
 </div>
 
-<!-- Reason required when cancelling/substituting an active task -->
-<div id="reason-overlay">
-  <div class="modal">
-    <h2>Why change <span id="reason-activity-name"></span>?</h2>
-    <p class="modal-sub">A quick, honest line. This gets kept in your history.</p>
-    <textarea id="reason-text" placeholder="What happened…"></textarea>
-    <div class="modal-actions">
-      <button class="btn" id="btn-cancel-reason">Never mind</button>
-      <button class="btn warn" id="btn-confirm-reason" disabled>Confirm</button>
-    </div>
-  </div>
-</div>
-
-<!-- Manage the activity pool -->
-<div id="manage-overlay">
-  <div class="modal">
-    <h2>Your activities</h2>
-    <p class="modal-sub">The pool you choose from each day.</p>
-    <div id="manage-list"></div>
-    <hr class="modal-divider" />
-    <div id="new-activity-row-2" style="display:flex; gap:8px;">
-      <input id="new-activity-input-2" type="text" placeholder="e.g. Cold outreach" style="flex:1; font-family: var(--sans); font-size:13px; border:1px solid var(--line); border-radius:7px; padding:8px 10px; background: var(--paper); color: var(--ink);" />
-      <button class="btn" id="btn-add-activity-2">Add</button>
-    </div>
-    <div class="modal-actions">
-      <button class="btn primary" id="btn-close-manage">Done</button>
-    </div>
-  </div>
-</div>
-
+<script src="data-embedded.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
