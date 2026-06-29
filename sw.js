@@ -1,5 +1,5 @@
 /* Minimal offline cache for Do — Three a Day. */
-const CACHE_NAME = "do-three-a-day-v2";
+const CACHE_NAME = "do-three-a-day-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./manifest.json",
   "./assets/app-icon-192.png",
   "./assets/app-icon-512.png",
+  "./assets/app-icon-512-maskable.png",
 ];
 
 self.addEventListener("install", (event) => {
