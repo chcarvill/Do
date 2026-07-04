@@ -20,6 +20,10 @@ const EXTRA_COLORS = {
 let STATE = {
   activities: [],   // [{id, label, color}]
   days: {},          // 'YYYY-MM-DD' -> { slots: [{id, activityId, status}], log: [...] }
+  timeWasters: {
+    habits: [],   // [{id, label}]  -- catch mid-motion
+    filters: [],  // [{id, label}]  -- filter before saying yes
+  },
 };
 
 let pendingSlotIndex = null;   // which stone (0/1/2) the picker modal is filling
@@ -45,8 +49,23 @@ function boot() {
       { id: "a_exercise", label: "Physical exercise", color: "pink" },
     ];
     STATE.days = {};
-    saveToStorage();
   }
+
+  // migrate: saved states from before the Time Wasters tab existed won't
+  // have this field, so backfill it with defaults rather than crashing.
+  if (!STATE.timeWasters) {
+    STATE.timeWasters = {
+      habits: [
+        { id: "w_facebook", label: "Using Facebook" },
+        { id: "w_browsing", label: "Aimlessly browsing the internet" },
+      ],
+      filters: [
+        { id: "w_schmucks", label: "Working for arrogant schmucks" },
+      ],
+    };
+  }
+
+  saveToStorage();
   ensureToday();
   render();
 }
@@ -167,6 +186,7 @@ function render() {
   renderHeader();
   renderStones();
   renderHistory();
+  renderTimeWasters();
 }
 
 function renderHeader() {
@@ -486,6 +506,72 @@ function renderManageList() {
 }
 
 /* ---------------------------------------------------------- */
+/* Time Wasters tab                                               */
+/* Two flat lists, no statuses to track — just a checkpoint to     */
+/* read before drifting, not a log of failures.                    */
+/* ---------------------------------------------------------- */
+
+function renderTimeWasters() {
+  renderWasterList("habits", "waster-habits-list");
+  renderWasterList("filters", "waster-filters-list");
+}
+
+function renderWasterList(group, containerId) {
+  const list = document.getElementById(containerId);
+  list.innerHTML = "";
+  const items = STATE.timeWasters[group];
+
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "wasters-empty";
+    empty.textContent = "Nothing here yet — add one below.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "waster-row";
+    row.innerHTML = `
+      <span class="dot"></span>
+      <span class="name">${escapeHtml(item.label)}</span>
+      <span class="remove-waster" title="Remove">✕</span>
+    `;
+    row.querySelector(".remove-waster").addEventListener("click", () => {
+      removeWaster(group, item.id);
+    });
+    list.appendChild(row);
+  });
+}
+
+function addWaster(group, label) {
+  const trimmed = label.trim();
+  if (!trimmed) return null;
+  const item = { id: "w_" + Date.now(), label: trimmed };
+  STATE.timeWasters[group].push(item);
+  saveToStorage();
+  return item;
+}
+
+function removeWaster(group, id) {
+  STATE.timeWasters[group] = STATE.timeWasters[group].filter((w) => w.id !== id);
+  saveToStorage();
+  renderTimeWasters();
+}
+
+/* ---------------------------------------------------------- */
+/* Tab switching                                                  */
+/* ---------------------------------------------------------- */
+
+function switchTab(tab) {
+  const isToday = tab === "today";
+  document.getElementById("tab-today-panel").style.display = isToday ? "" : "none";
+  document.getElementById("tab-wasters-panel").style.display = isToday ? "none" : "";
+  document.getElementById("tab-today").classList.toggle("active", isToday);
+  document.getElementById("tab-wasters").classList.toggle("active", !isToday);
+}
+
+/* ---------------------------------------------------------- */
 /* Wiring                                                         */
 /* ---------------------------------------------------------- */
 
@@ -525,6 +611,31 @@ function wireUI() {
   });
   document.getElementById("new-activity-input-2").addEventListener("keydown", (e) => {
     if (e.key === "Enter") document.getElementById("btn-add-activity-2").click();
+  });
+
+  document.getElementById("tab-today").addEventListener("click", () => switchTab("today"));
+  document.getElementById("tab-wasters").addEventListener("click", () => switchTab("wasters"));
+
+  document.getElementById("btn-add-waster-habit").addEventListener("click", () => {
+    const input = document.getElementById("waster-habit-input");
+    if (addWaster("habits", input.value)) {
+      input.value = "";
+      renderWasterList("habits", "waster-habits-list");
+    }
+  });
+  document.getElementById("waster-habit-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btn-add-waster-habit").click();
+  });
+
+  document.getElementById("btn-add-waster-filter").addEventListener("click", () => {
+    const input = document.getElementById("waster-filter-input");
+    if (addWaster("filters", input.value)) {
+      input.value = "";
+      renderWasterList("filters", "waster-filters-list");
+    }
+  });
+  document.getElementById("waster-filter-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btn-add-waster-filter").click();
   });
 
   // close modals on overlay background click (not when clicking the modal itself)
