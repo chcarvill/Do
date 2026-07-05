@@ -19,7 +19,7 @@ const EXTRA_COLORS = {
 
 let STATE = {
   activities: [],   // [{id, label, color}]
-  days: {},          // 'YYYY-MM-DD' -> { slots: [{id, activityId, status}], log: [...] }
+  days: {},          // 'YYYY-MM-DD' -> { slots: [{id, activityId, status, detail, link, note}], log: [...] }
   timeWasters: {
     habits: [],   // [{id, label}]  -- catch mid-motion
     filters: [],  // [{id, label}]  -- filter before saying yes
@@ -27,8 +27,13 @@ let STATE = {
 };
 
 let pendingSlotIndex = null;   // which stone (0/1/2) the picker modal is filling
+let pendingIso = null;         // which day's slot the picker modal is filling
 let pendingCancelSlot = null;  // which stone is being cancelled/substituted, awaiting a reason
+let pendingCancelIso = null;   // which day's stone is being cancelled/substituted
 let pendingSubstituteActivityId = null; // if cancelling-to-substitute, the new activity chosen
+let pendingDetailIso = null;   // which day's slot the detail modal is editing
+let pendingDetailSlot = null;  // which slot index the detail modal is editing
+let currentWeekStart = null;   // Monday ISO of the week currently shown in "This week"
 
 /* ---------------------------------------------------------- */
 /* Bootstrapping                                                */
@@ -66,6 +71,7 @@ function boot() {
   }
 
   saveToStorage();
+  currentWeekStart = mondayOf(todayISO());
   ensureToday();
   render();
 }
@@ -110,6 +116,36 @@ function isoMinusDays(iso, n) {
   return fmtISO(d);
 }
 
+function isoPlusDays(iso, n) {
+  return isoMinusDays(iso, -n);
+}
+
+function mondayOf(iso) {
+  const d = new Date(iso + "T00:00:00");
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return fmtISO(d);
+}
+
+function weekDates(mondayIso) {
+  const out = [];
+  for (let i = 0; i < 7; i++) out.push(isoPlusDays(mondayIso, i));
+  return out;
+}
+
+function fmtDayLabelShort(iso) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function fmtWeekRangeLabel(mondayIso) {
+  const sunday = isoPlusDays(mondayIso, 6);
+  const mondayLabel = new Date(mondayIso + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const sundayLabel = new Date(sunday + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${mondayLabel} – ${sundayLabel}`;
+}
+
 function fmtDayLabel(iso) {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -119,19 +155,39 @@ function fmtDayLabel(iso) {
 /* Day / slot helpers                                            */
 /* ---------------------------------------------------------- */
 
-function ensureToday() {
-  const iso = todayISO();
+function ensureDay(iso) {
   if (!STATE.days[iso]) {
     STATE.days[iso] = {
       slots: [
-        { id: "s_" + iso + "_0", activityId: null, status: "empty" },
-        { id: "s_" + iso + "_1", activityId: null, status: "empty" },
-        { id: "s_" + iso + "_2", activityId: null, status: "empty" },
+        { id: "s_" + iso + "_0", activityId: null, status: "empty", detail: "", link: "", note: "" },
+        { id: "s_" + iso + "_1", activityId: null, status: "empty", detail: "", link: "", note: "" },
+        { id: "s_" + iso + "_2", activityId: null, status: "empty", detail: "", link: "", note: "" },
       ],
       log: [],
     };
     saveToStorage();
+  } else {
+    // migrate: older saved days may predate detail/link/note fields
+    let changed = false;
+    STATE.days[iso].slots.forEach((s) => {
+      if (s.detail === undefined) { s.detail = ""; changed = true; }
+      if (s.link === undefined) { s.link = ""; changed = true; }
+      if (s.note === undefined) { s.note = ""; changed = true; }
+    });
+    if (changed) saveToStorage();
   }
+}
+
+function ensureToday() {
+  ensureDay(todayISO());
+}
+
+function ensureWeek(mondayIso) {
+  weekDates(mondayIso).forEach(ensureDay);
+}
+
+function dayData(iso) {
+  return STATE.days[iso];
 }
 
 function todayData() {
@@ -187,6 +243,7 @@ function render() {
   renderStones();
   renderHistory();
   renderTimeWasters();
+  renderWeekTab();
 }
 
 function renderHeader() {
@@ -203,7 +260,8 @@ function renderHeader() {
 function renderStones() {
   const row = document.getElementById("stones-row");
   row.innerHTML = "";
-  const day = todayData();
+  const iso = todayISO();
+  const day = dayData(iso);
 
   day.slots.forEach((slot, i) => {
     const stone = document.createElement("div");
@@ -216,7 +274,7 @@ function renderStones() {
         <span class="stone-plus">+</span>
         <span class="stone-cta">Pick a task</span>
       `;
-      stone.addEventListener("click", () => openPicker(i));
+      stone.addEventListener("click", () => openPicker(iso, i));
     } else {
       const activity = activityById(slot.activityId);
       const label = activity ? activity.label : "Unknown";
@@ -225,7 +283,9 @@ function renderStones() {
       stone.innerHTML = `
         <span class="stone-number">${i + 1}</span>
         <span class="stone-cancel" title="Cancel or swap this task">✕</span>
+        <span class="stone-detail-btn" title="Add detail, link, or a note">✎</span>
         <span class="stone-activity">${escapeHtml(label)}</span>
+        <span class="stone-indicators">${slotIndicatorsHtml(slot)}</span>
         ${
           slot.status === "done"
             ? `<span class="stone-check">✓ done</span>`
@@ -235,19 +295,40 @@ function renderStones() {
       const cancelEl = stone.querySelector(".stone-cancel");
       cancelEl.addEventListener("click", (e) => {
         e.stopPropagation();
-        openCancelReason(i);
+        openCancelReason(iso, i);
       });
+      const detailEl = stone.querySelector(".stone-detail-btn");
+      detailEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openDetailModal(iso, i);
+      });
+      const linkEl = stone.querySelector(".stone-link");
+      if (linkEl) linkEl.addEventListener("click", (e) => e.stopPropagation());
       const doneBtn = stone.querySelector(".stone-mark-done");
       if (doneBtn) {
         doneBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          markDone(i);
+          markDone(iso, i);
         });
       }
     }
 
     row.appendChild(stone);
   });
+}
+
+function slotIndicatorsHtml(slot) {
+  let out = "";
+  if (isSafeUrl(slot.link)) {
+    out += `<a class="stone-link" href="${escapeAttr(slot.link)}" target="_blank" rel="noopener" title="Open link">🔗</a>`;
+  }
+  if (slot.detail) {
+    out += `<span title="${escapeAttr(slot.detail)}">📝</span>`;
+  }
+  if (slot.note) {
+    out += `<span title="${escapeAttr(slot.note)}">💡</span>`;
+  }
+  return out;
 }
 
 function renderHistory() {
@@ -325,19 +406,32 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function escapeAttr(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function isSafeUrl(url) {
+  return /^https?:\/\//i.test(url || "");
+}
+
 /* ---------------------------------------------------------- */
 /* Slot actions                                                  */
 /* ---------------------------------------------------------- */
 
-function markDone(slotIndex) {
-  const day = todayData();
+function markDone(iso, slotIndex) {
+  const day = dayData(iso);
   day.slots[slotIndex].status = "done";
   saveToStorage();
   render();
 }
 
-function assignActivity(slotIndex, activityId) {
-  const day = todayData();
+function assignActivity(iso, slotIndex, activityId) {
+  const day = dayData(iso);
   day.slots[slotIndex].activityId = activityId;
   day.slots[slotIndex].status = "active";
   saveToStorage();
@@ -348,8 +442,11 @@ function assignActivity(slotIndex, activityId) {
 /* Picker modal (filling an empty stone)                         */
 /* ---------------------------------------------------------- */
 
-function openPicker(slotIndex) {
+function openPicker(iso, slotIndex) {
+  pendingIso = iso;
   pendingSlotIndex = slotIndex;
+  pendingCancelIso = null;
+  pendingCancelSlot = null;
   document.getElementById("picker-title").textContent = "Choose your task";
   document.getElementById("picker-sub").textContent = "Pick one of your key empowering activities.";
   renderActivityList();
@@ -370,9 +467,9 @@ function renderActivityList() {
         // after a reason is confirmed — so stash it and open the reason modal.
         pendingSubstituteActivityId = activity.id;
         document.getElementById("picker-overlay").classList.remove("open");
-        openReasonModal(pendingCancelSlot, "substituted", activity.id);
+        openReasonModal(pendingCancelIso, pendingCancelSlot, "substituted", activity.id);
       } else {
-        assignActivity(pendingSlotIndex, activity.id);
+        assignActivity(pendingIso, pendingSlotIndex, activity.id);
         closePicker();
       }
     });
@@ -382,6 +479,7 @@ function renderActivityList() {
 
 function closePicker() {
   document.getElementById("picker-overlay").classList.remove("open");
+  pendingIso = null;
   pendingSlotIndex = null;
 }
 
@@ -389,8 +487,11 @@ function closePicker() {
 /* Cancel / substitute flow — always requires a reason           */
 /* ---------------------------------------------------------- */
 
-function openCancelReason(slotIndex) {
+function openCancelReason(iso, slotIndex) {
+  pendingCancelIso = iso;
   pendingCancelSlot = slotIndex;
+  pendingIso = null;
+  pendingSlotIndex = null;
   // offer the choice: cancel outright, or pick a substitute first (which
   // re-opens the picker, then funnels into the same reason requirement)
   document.getElementById("picker-title").textContent = "Swap for a different task";
@@ -408,17 +509,18 @@ function openCancelReason(slotIndex) {
   cancelOutright.innerHTML = `<span class="dot" style="background:var(--clay);"></span> Cancel — leave this slot empty`;
   cancelOutright.addEventListener("click", () => {
     document.getElementById("picker-overlay").classList.remove("open");
-    openReasonModal(slotIndex, "cancelled", null);
+    openReasonModal(iso, slotIndex, "cancelled", null);
   });
   list.insertBefore(cancelOutright, list.firstChild);
 
   document.getElementById("picker-overlay").classList.add("open");
 }
 
-function openReasonModal(slotIndex, type, substituteActivityId) {
+function openReasonModal(iso, slotIndex, type, substituteActivityId) {
+  pendingCancelIso = iso;
   pendingCancelSlot = slotIndex;
   pendingSubstituteActivityId = substituteActivityId;
-  const day = todayData();
+  const day = dayData(iso);
   const currentActivity = activityById(day.slots[slotIndex].activityId);
   document.getElementById("reason-activity-name").textContent = currentActivity ? currentActivity.label : "this task";
   document.getElementById("reason-text").value = "";
@@ -429,6 +531,7 @@ function openReasonModal(slotIndex, type, substituteActivityId) {
 
 function closeReasonModal() {
   document.getElementById("reason-overlay").classList.remove("open");
+  pendingCancelIso = null;
   pendingCancelSlot = null;
   pendingSubstituteActivityId = null;
 }
@@ -437,7 +540,7 @@ function confirmReason() {
   const reasonText = document.getElementById("reason-text").value.trim();
   if (!reasonText) return;
   const type = document.getElementById("reason-overlay").dataset.type;
-  const day = todayData();
+  const day = dayData(pendingCancelIso);
   const slot = day.slots[pendingCancelSlot];
 
   day.log.push({
@@ -457,6 +560,38 @@ function confirmReason() {
 
   saveToStorage();
   closeReasonModal();
+  render();
+}
+
+/* ---------------------------------------------------------- */
+/* Task detail modal — notes, link, and a static reminder note   */
+/* ---------------------------------------------------------- */
+
+function openDetailModal(iso, slotIndex) {
+  pendingDetailIso = iso;
+  pendingDetailSlot = slotIndex;
+  const slot = dayData(iso).slots[slotIndex];
+  const activity = activityById(slot.activityId);
+  document.getElementById("detail-activity-name").textContent = activity ? activity.label : "this task";
+  document.getElementById("detail-text").value = slot.detail || "";
+  document.getElementById("detail-link").value = slot.link || "";
+  document.getElementById("detail-note").value = slot.note || "";
+  document.getElementById("detail-overlay").classList.add("open");
+}
+
+function closeDetailModal() {
+  document.getElementById("detail-overlay").classList.remove("open");
+  pendingDetailIso = null;
+  pendingDetailSlot = null;
+}
+
+function saveDetail() {
+  const slot = dayData(pendingDetailIso).slots[pendingDetailSlot];
+  slot.detail = document.getElementById("detail-text").value.trim();
+  slot.link = document.getElementById("detail-link").value.trim();
+  slot.note = document.getElementById("detail-note").value.trim();
+  saveToStorage();
+  closeDetailModal();
   render();
 }
 
@@ -560,15 +695,206 @@ function removeWaster(group, id) {
 }
 
 /* ---------------------------------------------------------- */
+/* This week tab — plan ahead across a Mon–Sun grid, plus a       */
+/* rolling agenda of everything upcoming across any days visited. */
+/* ---------------------------------------------------------- */
+
+function renderWeekTab() {
+  if (!currentWeekStart) currentWeekStart = mondayOf(todayISO());
+  ensureWeek(currentWeekStart);
+  document.getElementById("week-range-label").textContent = fmtWeekRangeLabel(currentWeekStart);
+  renderWeekDays();
+  renderUpcomingList();
+}
+
+function renderWeekDays() {
+  const container = document.getElementById("week-days");
+  container.innerHTML = "";
+  const todayIso = todayISO();
+
+  weekDates(currentWeekStart).forEach((iso) => {
+    const day = dayData(iso);
+    const card = document.createElement("div");
+    card.className = "day-card" + (iso === todayIso ? " is-today" : "");
+    card.innerHTML = `
+      <div class="day-card-header">
+        <span class="day-card-date">${fmtDayLabelShort(iso)}</span>
+        ${iso === todayIso ? `<span class="day-card-today-tag">Today</span>` : ""}
+      </div>
+      <div class="day-card-slots"></div>
+    `;
+    const slotsWrap = card.querySelector(".day-card-slots");
+
+    day.slots.forEach((slot, i) => {
+      const chip = document.createElement("div");
+      if (slot.status === "empty") {
+        chip.className = "week-slot-chip empty";
+        chip.innerHTML = `<span>+ Plan a task</span>`;
+        chip.addEventListener("click", () => openPicker(iso, i));
+      } else {
+        const activity = activityById(slot.activityId);
+        const label = activity ? activity.label : "Unknown";
+        chip.className = `week-slot-chip ${slot.status}`;
+        chip.innerHTML = `
+          <span class="chip-label">${escapeHtml(label)}</span>
+          <span class="stone-indicators">${slotIndicatorsHtml(slot)}</span>
+          <span class="chip-actions">
+            <span class="chip-detail-btn" title="Detail, link, or note">✎</span>
+            <span class="chip-cancel-btn" title="Change or remove">✕</span>
+          </span>
+        `;
+        chip.querySelector(".chip-detail-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          openDetailModal(iso, i);
+        });
+        chip.querySelector(".chip-cancel-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          openCancelReason(iso, i);
+        });
+        const linkEl = chip.querySelector(".stone-link");
+        if (linkEl) linkEl.addEventListener("click", (e) => e.stopPropagation());
+      }
+      slotsWrap.appendChild(chip);
+    });
+
+    container.appendChild(card);
+  });
+}
+
+function renderUpcomingList() {
+  const list = document.getElementById("upcoming-list");
+  list.innerHTML = "";
+  const todayIso = todayISO();
+
+  const rows = [];
+  Object.keys(STATE.days)
+    .filter((iso) => iso >= todayIso)
+    .sort()
+    .forEach((iso) => {
+      const day = STATE.days[iso];
+      day.slots.forEach((slot) => {
+        if (slot.activityId && slot.status !== "empty") {
+          rows.push({ iso, slot });
+        }
+      });
+    });
+
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.id = "upcoming-empty";
+    empty.textContent = "Nothing planned ahead yet — assign a task on This week to see it here.";
+    list.appendChild(empty);
+    return;
+  }
+
+  rows.forEach(({ iso, slot }) => {
+    const activity = activityById(slot.activityId);
+    const label = activity ? activity.label : "Unknown";
+    const row = document.createElement("div");
+    row.className = "upcoming-row";
+    row.innerHTML = `
+      <span class="upcoming-date">${fmtDayLabelShort(iso)}</span>
+      <span class="upcoming-label">${escapeHtml(label)}${slot.status === "done" ? " ✓" : ""}</span>
+      <span class="stone-indicators">${slotIndicatorsHtml(slot)}</span>
+    `;
+    const linkEl = row.querySelector(".stone-link");
+    if (linkEl) linkEl.addEventListener("click", (e) => e.stopPropagation());
+    list.appendChild(row);
+  });
+}
+
+function goToWeek(offsetDays) {
+  currentWeekStart = isoPlusDays(currentWeekStart, offsetDays);
+  renderWeekTab();
+}
+
+function emailWeek() {
+  const dates = weekDates(currentWeekStart);
+  let body = `Do — Week of ${fmtWeekRangeLabel(currentWeekStart)}\n\n`;
+
+  dates.forEach((iso) => {
+    const day = dayData(iso);
+    body += `${fmtDayLabelShort(iso)}\n`;
+    const filled = day.slots.filter((s) => s.activityId);
+    if (!filled.length) {
+      body += "  (nothing planned)\n";
+    } else {
+      filled.forEach((s) => {
+        const activity = activityById(s.activityId);
+        const label = activity ? activity.label : "Unknown";
+        body += `  - ${label}${s.status === "done" ? " (done)" : ""}\n`;
+        if (s.detail) body += `      detail: ${s.detail}\n`;
+        if (s.link) body += `      link: ${s.link}\n`;
+        if (s.note) body += `      worth checking: ${s.note}\n`;
+      });
+    }
+    body += "\n";
+  });
+
+  sendMailto(`Do — Week of ${fmtWeekRangeLabel(currentWeekStart)}`, body);
+}
+
+function emailToday() {
+  const iso = todayISO();
+  const day = dayData(iso);
+  const dayLabel = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  let body = `Do — ${dayLabel}\n\n`;
+
+  const filled = day.slots.filter((s) => s.activityId);
+  if (!filled.length) {
+    body += "(nothing planned yet)\n";
+  } else {
+    filled.forEach((s) => {
+      const activity = activityById(s.activityId);
+      const label = activity ? activity.label : "Unknown";
+      body += `- ${label}${s.status === "done" ? " (done)" : ""}\n`;
+      if (s.detail) body += `    detail: ${s.detail}\n`;
+      if (s.link) body += `    link: ${s.link}\n`;
+      if (s.note) body += `    worth checking: ${s.note}\n`;
+    });
+  }
+
+  sendMailto(`Do — ${dayLabel}`, body);
+}
+
+function emailWasters() {
+  let body = `Do — Time Wasters\n\n`;
+
+  body += `Catch mid-motion\n`;
+  if (!STATE.timeWasters.habits.length) {
+    body += "  (none yet)\n";
+  } else {
+    STATE.timeWasters.habits.forEach((h) => (body += `  - ${h.label}\n`));
+  }
+
+  body += `\nFilter before saying yes\n`;
+  if (!STATE.timeWasters.filters.length) {
+    body += "  (none yet)\n";
+  } else {
+    STATE.timeWasters.filters.forEach((f) => (body += `  - ${f.label}\n`));
+  }
+
+  sendMailto("Do — Time Wasters", body);
+}
+
+function sendMailto(subject, body) {
+  const encodedSubject = encodeURIComponent(subject);
+  const encodedBody = encodeURIComponent(body);
+  window.location.href = `mailto:?subject=${encodedSubject}&body=${encodedBody}`;
+}
+
+/* ---------------------------------------------------------- */
 /* Tab switching                                                  */
 /* ---------------------------------------------------------- */
 
 function switchTab(tab) {
-  const isToday = tab === "today";
-  document.getElementById("tab-today-panel").style.display = isToday ? "" : "none";
-  document.getElementById("tab-wasters-panel").style.display = isToday ? "none" : "";
-  document.getElementById("tab-today").classList.toggle("active", isToday);
-  document.getElementById("tab-wasters").classList.toggle("active", !isToday);
+  document.getElementById("tab-today-panel").style.display = tab === "today" ? "" : "none";
+  document.getElementById("tab-week-panel").style.display = tab === "week" ? "" : "none";
+  document.getElementById("tab-wasters-panel").style.display = tab === "wasters" ? "" : "none";
+  document.getElementById("tab-today").classList.toggle("active", tab === "today");
+  document.getElementById("tab-week").classList.toggle("active", tab === "week");
+  document.getElementById("tab-wasters").classList.toggle("active", tab === "wasters");
+  if (tab === "week") renderWeekTab();
 }
 
 /* ---------------------------------------------------------- */
@@ -614,7 +940,17 @@ function wireUI() {
   });
 
   document.getElementById("tab-today").addEventListener("click", () => switchTab("today"));
+  document.getElementById("tab-week").addEventListener("click", () => switchTab("week"));
   document.getElementById("tab-wasters").addEventListener("click", () => switchTab("wasters"));
+
+  document.getElementById("btn-prev-week").addEventListener("click", () => goToWeek(-7));
+  document.getElementById("btn-next-week").addEventListener("click", () => goToWeek(7));
+  document.getElementById("btn-email-week").addEventListener("click", emailWeek);
+  document.getElementById("btn-email-today").addEventListener("click", emailToday);
+  document.getElementById("btn-email-wasters").addEventListener("click", emailWasters);
+
+  document.getElementById("btn-cancel-detail").addEventListener("click", closeDetailModal);
+  document.getElementById("btn-save-detail").addEventListener("click", saveDetail);
 
   document.getElementById("btn-add-waster-habit").addEventListener("click", () => {
     const input = document.getElementById("waster-habit-input");
@@ -643,6 +979,7 @@ function wireUI() {
     ["picker-overlay", closePicker],
     ["reason-overlay", closeReasonModal],
     ["manage-overlay", () => document.getElementById("manage-overlay").classList.remove("open")],
+    ["detail-overlay", closeDetailModal],
   ].forEach(([id, closeFn]) => {
     document.getElementById(id).addEventListener("click", (e) => {
       if (e.target.id === id) closeFn();

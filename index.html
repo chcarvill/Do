@@ -217,6 +217,29 @@
   }
   .stone-cancel:hover { opacity: 1; color: var(--clay-dark); }
 
+  .stone-detail-btn {
+    position: absolute;
+    top: 8px;
+    right: 30px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px;
+    line-height: 1;
+  }
+  .stone-detail-btn:hover { opacity: 1; color: var(--sage-dark); }
+
+  .stone-indicators {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    font-size: 13px;
+    margin-top: -4px;
+    margin-bottom: 6px;
+  }
+  .stone-indicators a { text-decoration: none; }
+
   #stones-hint {
     text-align: center;
     font-size: 12px;
@@ -226,7 +249,7 @@
   }
 
   /* ── Activity picker modal ──────────────────────────────── */
-  #picker-overlay, #reason-overlay, #manage-overlay {
+  #picker-overlay, #reason-overlay, #manage-overlay, #detail-overlay {
     position: fixed;
     inset: 0;
     background: rgba(31,41,55,0.35);
@@ -236,7 +259,7 @@
     z-index: 50;
     padding: 20px;
   }
-  #picker-overlay.open, #reason-overlay.open, #manage-overlay.open { display: flex; }
+  #picker-overlay.open, #reason-overlay.open, #manage-overlay.open, #detail-overlay.open { display: flex; }
 
   .modal {
     background: var(--paper);
@@ -570,6 +593,192 @@
     color: var(--ink);
   }
 
+  /* ── This week tab ──────────────────────────────────────── */
+  #week-section {
+    padding: 28px 24px 8px;
+  }
+  .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .week-nav .btn {
+    padding: 5px 12px;
+    font-size: 15px;
+    line-height: 1;
+  }
+  .week-range {
+    font-family: var(--serif);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    min-width: 150px;
+    text-align: center;
+  }
+  #btn-email-week, #btn-email-today, #btn-email-wasters {
+    display: block;
+    margin: 0 auto 24px;
+  }
+
+  #week-days {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .day-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: var(--paper);
+  }
+  .day-card.is-today {
+    border-color: var(--sage);
+    background: var(--sage-tint);
+  }
+  .day-card-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .day-card-date {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .day-card-today-tag {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--sage-dark);
+    background: white;
+    border: 1px solid var(--sage);
+    border-radius: 10px;
+    padding: 1px 7px;
+  }
+  .day-card-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .week-slot-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    background: var(--paper);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .week-slot-chip.empty {
+    border-style: dashed;
+    color: var(--ink-soft);
+    justify-content: center;
+  }
+  .week-slot-chip.empty:hover { border-color: var(--sage); background: var(--sage-tint); }
+  .week-slot-chip.active {
+    border-color: var(--sage);
+    background: white;
+  }
+  .week-slot-chip.done {
+    border-color: var(--sage-dark);
+    background: var(--sage-tint);
+  }
+  .week-slot-chip.done .chip-label {
+    text-decoration: line-through;
+    text-decoration-color: var(--sage-dark);
+  }
+  .chip-label {
+    flex: 1;
+    font-weight: 500;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chip-actions {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+  .chip-actions span {
+    opacity: 0.5;
+    cursor: pointer;
+    font-size: 12.5px;
+  }
+  .chip-actions span:hover { opacity: 1; }
+
+  /* ── Upcoming rolling list ──────────────────────────────── */
+  #upcoming-section {
+    padding: 24px 24px 40px;
+  }
+  #upcoming-section h2 {
+    font-family: var(--serif);
+    font-size: 16px;
+    margin: 0 0 12px;
+  }
+  .upcoming-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .upcoming-row:last-child { border-bottom: none; }
+  .upcoming-date {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    width: 76px;
+    flex: 0 0 auto;
+  }
+  .upcoming-label {
+    flex: 1;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  #upcoming-empty {
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  /* ── Detail modal fields ────────────────────────────────── */
+  .detail-label {
+    display: block;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin: 12px 0 5px;
+  }
+  .detail-label:first-of-type { margin-top: 0; }
+  #detail-overlay textarea,
+  #detail-overlay input {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 11px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  #detail-overlay textarea {
+    min-height: 70px;
+    resize: vertical;
+  }
+  #detail-activity-name {
+    font-family: var(--serif);
+    font-weight: 600;
+    color: var(--sage-dark);
+  }
+
   ::-webkit-scrollbar { width: 9px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
@@ -589,12 +798,14 @@
     </div>
     <nav id="tab-nav">
       <button class="tab-btn active" id="tab-today" data-tab="today">Today</button>
+      <button class="tab-btn" id="tab-week" data-tab="week">This week</button>
       <button class="tab-btn" id="tab-wasters" data-tab="wasters">Time wasters</button>
     </nav>
   </header>
 
   <div id="tab-today-panel" class="tab-panel">
     <section id="stones-section">
+      <button class="btn primary" id="btn-email-today">✉ Email today's tasks</button>
       <div id="stones-row"></div>
       <div id="stones-hint">Three, no more. Choose with intent.</div>
     </section>
@@ -608,8 +819,26 @@
     </section>
   </div>
 
+  <div id="tab-week-panel" class="tab-panel" style="display:none;">
+    <section id="week-section">
+      <div class="week-nav">
+        <button class="btn" id="btn-prev-week" title="Previous week">‹</button>
+        <div class="week-range" id="week-range-label"></div>
+        <button class="btn" id="btn-next-week" title="Next week">›</button>
+      </div>
+      <button class="btn primary" id="btn-email-week">✉ Email this week</button>
+      <div id="week-days"></div>
+    </section>
+
+    <section id="upcoming-section">
+      <h2>Upcoming</h2>
+      <div id="upcoming-list"></div>
+    </section>
+  </div>
+
   <div id="tab-wasters-panel" class="tab-panel" style="display:none;">
     <section id="wasters-section">
+      <button class="btn primary" id="btn-email-wasters">✉ Email these lists</button>
       <div class="wasters-intro">
         <p>Not a guilt list. A checkpoint — read it before you drift, not after.</p>
       </div>
@@ -682,6 +911,24 @@
     </div>
     <div class="modal-actions">
       <button class="btn primary" id="btn-close-manage">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Task detail: notes, link, and a static "worth checking" reminder -->
+<div id="detail-overlay">
+  <div class="modal">
+    <h2>Details — <span id="detail-activity-name"></span></h2>
+    <p class="modal-sub">Nothing here is required. Leave any field blank.</p>
+    <label class="detail-label">Detail</label>
+    <textarea id="detail-text" placeholder="Any specifics for this task…"></textarea>
+    <label class="detail-label">Link</label>
+    <input id="detail-link" type="url" placeholder="https://…" />
+    <label class="detail-label">Worth checking</label>
+    <input id="detail-note" type="text" placeholder="e.g. Check Mission Control for context" />
+    <div class="modal-actions">
+      <button class="btn" id="btn-cancel-detail">Close</button>
+      <button class="btn primary" id="btn-save-detail">Save</button>
     </div>
   </div>
 </div>
