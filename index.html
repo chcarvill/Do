@@ -230,6 +230,19 @@
   }
   .stone-detail-btn:hover { opacity: 1; color: var(--sage-dark); }
 
+  .stone-time-btn {
+    position: absolute;
+    top: 8px;
+    right: 52px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px;
+    line-height: 1;
+  }
+  .stone-time-btn:hover { opacity: 1; color: var(--amber-dark); }
+
   .stone-indicators {
     display: flex;
     gap: 6px;
@@ -249,7 +262,7 @@
   }
 
   /* ── Activity picker modal ──────────────────────────────── */
-  #picker-overlay, #reason-overlay, #manage-overlay, #detail-overlay {
+  #picker-overlay, #reason-overlay, #manage-overlay, #detail-overlay, #log-time-overlay {
     position: fixed;
     inset: 0;
     background: rgba(31,41,55,0.35);
@@ -259,7 +272,7 @@
     z-index: 50;
     padding: 20px;
   }
-  #picker-overlay.open, #reason-overlay.open, #manage-overlay.open, #detail-overlay.open { display: flex; }
+  #picker-overlay.open, #reason-overlay.open, #manage-overlay.open, #detail-overlay.open, #log-time-overlay.open { display: flex; }
 
   .modal {
     background: var(--paper);
@@ -493,6 +506,7 @@
     display: flex;
     gap: 6px;
     margin-top: 16px;
+    flex-wrap: wrap;
   }
   .tab-btn {
     font-family: var(--sans);
@@ -564,6 +578,15 @@
     font-weight: 500;
     color: var(--clay-dark);
   }
+  .waster-row .log-waster-time {
+    font-size: 13px;
+    color: var(--clay-dark);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px 4px;
+    flex: 0 0 auto;
+  }
+  .waster-row .log-waster-time:hover { opacity: 1; }
   .waster-row .remove-waster {
     font-size: 13px;
     color: var(--clay-dark);
@@ -750,7 +773,7 @@
     font-style: italic;
   }
 
-  /* ── Detail modal fields ────────────────────────────────── */
+  /* ── Detail & log-time modal fields ────────────────────────── */
   .detail-label {
     display: block;
     font-size: 12px;
@@ -759,7 +782,10 @@
   }
   .detail-label:first-of-type { margin-top: 0; }
   #detail-overlay textarea,
-  #detail-overlay input {
+  #detail-overlay input,
+  #log-time-overlay textarea,
+  #log-time-overlay input,
+  #log-time-overlay select {
     width: 100%;
     font-family: var(--sans);
     font-size: 13.5px;
@@ -777,6 +803,101 @@
     font-family: var(--serif);
     font-weight: 600;
     color: var(--sage-dark);
+  }
+  #log-time-item-name {
+    font-family: var(--serif);
+    font-weight: 600;
+    color: var(--sage-dark);
+  }
+  #log-time-picker-row {
+    margin-bottom: 4px;
+  }
+
+  /* ── Insights tab ───────────────────────────────────────── */
+  #insights-section {
+    padding: 28px 24px 8px;
+  }
+  .range-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .range-btn {
+    border-radius: 20px;
+  }
+  #btn-log-time-freeform {
+    display: block;
+    margin: 0 auto 20px;
+  }
+  #insights-summary {
+    text-align: center;
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--ink-soft);
+    margin-bottom: 20px;
+    min-height: 18px;
+  }
+  #insights-chart-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  #insights-chart-wrap svg {
+    width: 200px;
+    height: 200px;
+    max-width: 60vw;
+    max-height: 60vw;
+  }
+  #insights-empty {
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-style: italic;
+    text-align: center;
+    padding: 20px 10px 40px;
+  }
+  #insights-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 40px;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .legend-row:last-child { border-bottom: none; }
+  .legend-row .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+  .legend-label {
+    flex: 1;
+    font-weight: 500;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .legend-time {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    flex: 0 0 auto;
+  }
+  .legend-pct {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    width: 34px;
+    text-align: right;
+    flex: 0 0 auto;
   }
 
   ::-webkit-scrollbar { width: 9px; }
@@ -800,6 +921,7 @@
       <button class="tab-btn active" id="tab-today" data-tab="today">Today</button>
       <button class="tab-btn" id="tab-week" data-tab="week">This week</button>
       <button class="tab-btn" id="tab-wasters" data-tab="wasters">Time wasters</button>
+      <button class="tab-btn" id="tab-insights" data-tab="insights">Insights</button>
     </nav>
   </header>
 
@@ -862,6 +984,20 @@
           <button class="btn" id="btn-add-waster-filter">Add</button>
         </div>
       </div>
+    </section>
+  </div>
+
+  <div id="tab-insights-panel" class="tab-panel" style="display:none;">
+    <section id="insights-section">
+      <div class="range-toggle">
+        <button class="tab-btn range-btn active" data-range="today">Today</button>
+        <button class="tab-btn range-btn" data-range="week">This week</button>
+        <button class="tab-btn range-btn" data-range="all">All time</button>
+      </div>
+      <button class="btn primary" id="btn-log-time-freeform">⏱ Log time</button>
+      <div id="insights-summary"></div>
+      <div id="insights-chart-wrap"></div>
+      <div id="insights-legend"></div>
     </section>
   </div>
 
@@ -929,6 +1065,31 @@
     <div class="modal-actions">
       <button class="btn" id="btn-cancel-detail">Close</button>
       <button class="btn primary" id="btn-save-detail">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log time: manual duration entry, any date, against any task or time waster -->
+<div id="log-time-overlay">
+  <div class="modal">
+    <h2>Log time <span id="log-time-item-name-wrap">— <span id="log-time-item-name"></span></span></h2>
+    <p class="modal-sub">Any time of day, any date — this just adds to the total.</p>
+    <div id="log-time-picker-row" style="display:none;">
+      <label class="detail-label">Type</label>
+      <select id="log-time-type-select">
+        <option value="activity">Activity</option>
+        <option value="waster">Time waster</option>
+      </select>
+      <label class="detail-label">What</label>
+      <select id="log-time-item-select"></select>
+    </div>
+    <label class="detail-label">Date</label>
+    <input id="log-time-date" type="date" />
+    <label class="detail-label">Minutes</label>
+    <input id="log-time-minutes" type="number" min="1" placeholder="e.g. 45" />
+    <div class="modal-actions">
+      <button class="btn" id="btn-cancel-log-time">Cancel</button>
+      <button class="btn primary" id="btn-save-log-time" disabled>Save</button>
     </div>
   </div>
 </div>

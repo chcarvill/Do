@@ -24,6 +24,7 @@ let STATE = {
     habits: [],   // [{id, label}]  -- catch mid-motion
     filters: [],  // [{id, label}]  -- filter before saying yes
   },
+  timeLogs: [],   // [{id, itemType: 'activity'|'waster', itemId, itemLabel, minutes, date, loggedAt}]
 };
 
 let pendingSlotIndex = null;   // which stone (0/1/2) the picker modal is filling
@@ -34,6 +35,11 @@ let pendingSubstituteActivityId = null; // if cancelling-to-substitute, the new 
 let pendingDetailIso = null;   // which day's slot the detail modal is editing
 let pendingDetailSlot = null;  // which slot index the detail modal is editing
 let currentWeekStart = null;   // Monday ISO of the week currently shown in "This week"
+let pendingLogItemType = null; // 'activity' | 'waster' — what the time-log modal is logging against
+let pendingLogItemId = null;
+let pendingLogItemLabel = null;
+let pendingLogIsFreeform = false; // true when opened via the standalone "+ Log time" button
+let insightsRange = "today";   // 'today' | 'week' | 'all' — current Insights tab filter
 
 /* ---------------------------------------------------------- */
 /* Bootstrapping                                                */
@@ -68,6 +74,10 @@ function boot() {
         { id: "w_schmucks", label: "Working for arrogant schmucks" },
       ],
     };
+  }
+
+  if (!STATE.timeLogs) {
+    STATE.timeLogs = [];
   }
 
   saveToStorage();
@@ -244,6 +254,7 @@ function render() {
   renderHistory();
   renderTimeWasters();
   renderWeekTab();
+  renderInsights();
 }
 
 function renderHeader() {
@@ -284,6 +295,7 @@ function renderStones() {
         <span class="stone-number">${i + 1}</span>
         <span class="stone-cancel" title="Cancel or swap this task">✕</span>
         <span class="stone-detail-btn" title="Add detail, link, or a note">✎</span>
+        <span class="stone-time-btn" title="Log time spent">⏱</span>
         <span class="stone-activity">${escapeHtml(label)}</span>
         <span class="stone-indicators">${slotIndicatorsHtml(slot)}</span>
         ${
@@ -301,6 +313,11 @@ function renderStones() {
       detailEl.addEventListener("click", (e) => {
         e.stopPropagation();
         openDetailModal(iso, i);
+      });
+      const timeEl = stone.querySelector(".stone-time-btn");
+      timeEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openLogTimeModal("activity", activity ? activity.id : slot.activityId, label);
       });
       const linkEl = stone.querySelector(".stone-link");
       if (linkEl) linkEl.addEventListener("click", (e) => e.stopPropagation());
@@ -596,6 +613,228 @@ function saveDetail() {
 }
 
 /* ---------------------------------------------------------- */
+/* Log time modal — manual duration entry, any date, any item    */
+/* ---------------------------------------------------------- */
+
+function openLogTimeModal(itemType, itemId, itemLabel) {
+  pendingLogIsFreeform = false;
+  pendingLogItemType = itemType;
+  pendingLogItemId = itemId;
+  pendingLogItemLabel = itemLabel;
+  document.getElementById("log-time-item-name-wrap").style.display = "";
+  document.getElementById("log-time-item-name").textContent = itemLabel;
+  document.getElementById("log-time-picker-row").style.display = "none";
+  document.getElementById("log-time-date").value = todayISO();
+  document.getElementById("log-time-minutes").value = "";
+  document.getElementById("btn-save-log-time").disabled = true;
+  document.getElementById("log-time-overlay").classList.add("open");
+}
+
+function openLogTimeModalFreeform() {
+  pendingLogIsFreeform = true;
+  pendingLogItemType = null;
+  pendingLogItemId = null;
+  pendingLogItemLabel = null;
+  document.getElementById("log-time-item-name-wrap").style.display = "none";
+  document.getElementById("log-time-picker-row").style.display = "";
+  document.getElementById("log-time-type-select").value = "activity";
+  populateLogTimeItemSelect();
+  document.getElementById("log-time-date").value = todayISO();
+  document.getElementById("log-time-minutes").value = "";
+  document.getElementById("btn-save-log-time").disabled = true;
+  document.getElementById("log-time-overlay").classList.add("open");
+}
+
+function populateLogTimeItemSelect() {
+  const type = document.getElementById("log-time-type-select").value;
+  const select = document.getElementById("log-time-item-select");
+  select.innerHTML = "";
+  const items = type === "activity"
+    ? STATE.activities
+    : [...STATE.timeWasters.habits, ...STATE.timeWasters.filters];
+
+  if (!items.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = type === "activity" ? "No activities yet" : "No time wasters yet";
+    select.appendChild(opt);
+    return;
+  }
+
+  items.forEach((item) => {
+    const opt = document.createElement("option");
+    opt.value = item.id;
+    opt.textContent = item.label;
+    select.appendChild(opt);
+  });
+}
+
+function closeLogTimeModal() {
+  document.getElementById("log-time-overlay").classList.remove("open");
+  pendingLogItemType = null;
+  pendingLogItemId = null;
+  pendingLogItemLabel = null;
+  pendingLogIsFreeform = false;
+}
+
+function saveLogTime() {
+  const minutes = parseInt(document.getElementById("log-time-minutes").value, 10);
+  if (!minutes || minutes <= 0) return;
+  const date = document.getElementById("log-time-date").value || todayISO();
+
+  let itemType, itemId, itemLabel;
+  if (pendingLogIsFreeform) {
+    itemType = document.getElementById("log-time-type-select").value;
+    itemId = document.getElementById("log-time-item-select").value;
+    if (!itemId) return; // nothing to log against (empty pool)
+    const items = itemType === "activity"
+      ? STATE.activities
+      : [...STATE.timeWasters.habits, ...STATE.timeWasters.filters];
+    const found = items.find((i) => i.id === itemId);
+    itemLabel = found ? found.label : "Unknown";
+  } else {
+    itemType = pendingLogItemType;
+    itemId = pendingLogItemId;
+    itemLabel = pendingLogItemLabel;
+  }
+
+  STATE.timeLogs.push({
+    id: "log_" + Date.now(),
+    itemType,
+    itemId,
+    itemLabel,
+    minutes,
+    date,
+    loggedAt: new Date().toISOString(),
+  });
+
+  saveToStorage();
+  closeLogTimeModal();
+  render();
+}
+
+/* ---------------------------------------------------------- */
+/* Insights tab — combined pie chart of logged time, productive   */
+/* (activity) vs wasted (time-waster), by proportion.              */
+/* ---------------------------------------------------------- */
+
+const WASTE_COLORS = ["#C97D5D", "#B85C3E", "#8A4F36", "#D98B6B", "#A85F45", "#E0A184"];
+
+function setInsightsRange(range) {
+  insightsRange = range;
+  renderInsights();
+}
+
+function filterLogsByRange(range) {
+  const todayIso = todayISO();
+  if (range === "today") {
+    return STATE.timeLogs.filter((e) => e.date === todayIso);
+  }
+  if (range === "week") {
+    const monday = mondayOf(todayIso);
+    const sunday = isoPlusDays(monday, 6);
+    return STATE.timeLogs.filter((e) => e.date >= monday && e.date <= sunday);
+  }
+  return STATE.timeLogs.slice(); // all time
+}
+
+function fmtMinutes(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+function buildPieSVG(slices, total) {
+  const cx = 100, cy = 100, r = 90;
+  if (slices.length === 1) {
+    return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><circle cx="${cx}" cy="${cy}" r="${r}" fill="${slices[0].color}" /></svg>`;
+  }
+  let cumulative = 0;
+  let paths = "";
+  slices.forEach((slice) => {
+    const fraction = slice.minutes / total;
+    const startAngle = cumulative * 2 * Math.PI;
+    cumulative += fraction;
+    const endAngle = cumulative * 2 * Math.PI;
+    const x1 = cx + r * Math.sin(startAngle);
+    const y1 = cy - r * Math.cos(startAngle);
+    const x2 = cx + r * Math.sin(endAngle);
+    const y2 = cy - r * Math.cos(endAngle);
+    const largeArc = fraction > 0.5 ? 1 : 0;
+    paths += `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${slice.color}"><title>${escapeAttr(slice.label)}</title></path>`;
+  });
+  return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">${paths}</svg>`;
+}
+
+function renderInsights() {
+  document.querySelectorAll(".range-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.range === insightsRange);
+  });
+
+  const wrap = document.getElementById("insights-chart-wrap");
+  const legend = document.getElementById("insights-legend");
+  const summary = document.getElementById("insights-summary");
+  if (!wrap || !legend || !summary) return; // panel not in DOM yet on first paint
+
+  wrap.innerHTML = "";
+  legend.innerHTML = "";
+
+  const entries = filterLogsByRange(insightsRange);
+  if (!entries.length) {
+    summary.textContent = "";
+    wrap.innerHTML = `<div id="insights-empty">No time logged for this range yet — tap the ⏱ on a task or time waster to start.</div>`;
+    return;
+  }
+
+  const map = new Map();
+  entries.forEach((e) => {
+    const key = e.itemType + ":" + e.itemId;
+    if (!map.has(key)) {
+      map.set(key, { label: e.itemLabel, itemType: e.itemType, itemId: e.itemId, minutes: 0 });
+    }
+    map.get(key).minutes += e.minutes;
+  });
+
+  const items = Array.from(map.values()).sort((a, b) => b.minutes - a.minutes);
+  const total = items.reduce((sum, i) => sum + i.minutes, 0);
+
+  let wasteIdx = 0;
+  const slices = items.map((item) => {
+    let color;
+    if (item.itemType === "activity") {
+      const activity = activityById(item.itemId);
+      color = activity ? colorHex(activity.color) : "#9CA3AF";
+    } else {
+      color = WASTE_COLORS[wasteIdx % WASTE_COLORS.length];
+      wasteIdx++;
+    }
+    return { label: item.label, minutes: item.minutes, color };
+  });
+
+  wrap.innerHTML = buildPieSVG(slices, total);
+
+  const productiveMinutes = items.filter((i) => i.itemType === "activity").reduce((s, i) => s + i.minutes, 0);
+  const prodPct = Math.round((productiveMinutes / total) * 100);
+  const wastePct = 100 - prodPct;
+  summary.textContent = `${fmtMinutes(total)} logged — ${prodPct}% constructive, ${wastePct}% time wasters`;
+
+  items.forEach((item, i) => {
+    const pct = Math.round((item.minutes / total) * 100);
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    row.innerHTML = `
+      <span class="dot" style="background:${slices[i].color};"></span>
+      <span class="legend-label">${escapeHtml(item.label)}</span>
+      <span class="legend-time">${fmtMinutes(item.minutes)}</span>
+      <span class="legend-pct">${pct}%</span>
+    `;
+    legend.appendChild(row);
+  });
+}
+
+/* ---------------------------------------------------------- */
 /* Add a brand-new activity (from picker or manage modal)        */
 /* ---------------------------------------------------------- */
 
@@ -670,8 +909,12 @@ function renderWasterList(group, containerId) {
     row.innerHTML = `
       <span class="dot"></span>
       <span class="name">${escapeHtml(item.label)}</span>
+      <span class="log-waster-time" title="Log time spent">⏱</span>
       <span class="remove-waster" title="Remove">✕</span>
     `;
+    row.querySelector(".log-waster-time").addEventListener("click", () => {
+      openLogTimeModal("waster", item.id, item.label);
+    });
     row.querySelector(".remove-waster").addEventListener("click", () => {
       removeWaster(group, item.id);
     });
@@ -739,10 +982,15 @@ function renderWeekDays() {
           <span class="chip-label">${escapeHtml(label)}</span>
           <span class="stone-indicators">${slotIndicatorsHtml(slot)}</span>
           <span class="chip-actions">
+            <span class="chip-time-btn" title="Log time spent">⏱</span>
             <span class="chip-detail-btn" title="Detail, link, or note">✎</span>
             <span class="chip-cancel-btn" title="Change or remove">✕</span>
           </span>
         `;
+        chip.querySelector(".chip-time-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          openLogTimeModal("activity", activity ? activity.id : slot.activityId, label);
+        });
         chip.querySelector(".chip-detail-btn").addEventListener("click", (e) => {
           e.stopPropagation();
           openDetailModal(iso, i);
@@ -891,10 +1139,13 @@ function switchTab(tab) {
   document.getElementById("tab-today-panel").style.display = tab === "today" ? "" : "none";
   document.getElementById("tab-week-panel").style.display = tab === "week" ? "" : "none";
   document.getElementById("tab-wasters-panel").style.display = tab === "wasters" ? "" : "none";
+  document.getElementById("tab-insights-panel").style.display = tab === "insights" ? "" : "none";
   document.getElementById("tab-today").classList.toggle("active", tab === "today");
   document.getElementById("tab-week").classList.toggle("active", tab === "week");
   document.getElementById("tab-wasters").classList.toggle("active", tab === "wasters");
+  document.getElementById("tab-insights").classList.toggle("active", tab === "insights");
   if (tab === "week") renderWeekTab();
+  if (tab === "insights") renderInsights();
 }
 
 /* ---------------------------------------------------------- */
@@ -942,6 +1193,7 @@ function wireUI() {
   document.getElementById("tab-today").addEventListener("click", () => switchTab("today"));
   document.getElementById("tab-week").addEventListener("click", () => switchTab("week"));
   document.getElementById("tab-wasters").addEventListener("click", () => switchTab("wasters"));
+  document.getElementById("tab-insights").addEventListener("click", () => switchTab("insights"));
 
   document.getElementById("btn-prev-week").addEventListener("click", () => goToWeek(-7));
   document.getElementById("btn-next-week").addEventListener("click", () => goToWeek(7));
@@ -951,6 +1203,19 @@ function wireUI() {
 
   document.getElementById("btn-cancel-detail").addEventListener("click", closeDetailModal);
   document.getElementById("btn-save-detail").addEventListener("click", saveDetail);
+
+  document.querySelectorAll(".range-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setInsightsRange(btn.dataset.range));
+  });
+
+  document.getElementById("btn-cancel-log-time").addEventListener("click", closeLogTimeModal);
+  document.getElementById("btn-save-log-time").addEventListener("click", saveLogTime);
+  document.getElementById("log-time-minutes").addEventListener("input", (e) => {
+    const val = parseInt(e.target.value, 10);
+    document.getElementById("btn-save-log-time").disabled = !(val > 0);
+  });
+  document.getElementById("btn-log-time-freeform").addEventListener("click", openLogTimeModalFreeform);
+  document.getElementById("log-time-type-select").addEventListener("change", populateLogTimeItemSelect);
 
   document.getElementById("btn-add-waster-habit").addEventListener("click", () => {
     const input = document.getElementById("waster-habit-input");
@@ -980,6 +1245,7 @@ function wireUI() {
     ["reason-overlay", closeReasonModal],
     ["manage-overlay", () => document.getElementById("manage-overlay").classList.remove("open")],
     ["detail-overlay", closeDetailModal],
+    ["log-time-overlay", closeLogTimeModal],
   ].forEach(([id, closeFn]) => {
     document.getElementById(id).addEventListener("click", (e) => {
       if (e.target.id === id) closeFn();
