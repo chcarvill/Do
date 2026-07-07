@@ -25,6 +25,8 @@ let STATE = {
     filters: [],  // [{id, label}]  -- filter before saying yes
   },
   timeLogs: [],   // [{id, itemType: 'activity'|'waster', itemId, itemLabel, minutes, date, loggedAt}]
+  objectives: [], // [{id, label, detail}]  -- long-term objectives
+  commitments: [], // [{id, activityId, activityLabel, mode, startDate, endDate, appliedCount, skippedCount, createdAt}]
 };
 
 let pendingSlotIndex = null;   // which stone (0/1/2) the picker modal is filling
@@ -39,6 +41,7 @@ let pendingLogItemType = null; // 'activity' | 'waster' — what the time-log mo
 let pendingLogItemId = null;
 let pendingLogItemLabel = null;
 let pendingLogIsFreeform = false; // true when opened via the standalone "+ Log time" button
+let commitMode = "single"; // 'single' | 'range' — current mode in the Strategize commit form
 let insightsRange = "today";   // 'today' | 'week' | 'all' — current Insights tab filter
 
 /* ---------------------------------------------------------- */
@@ -78,6 +81,14 @@ function boot() {
 
   if (!STATE.timeLogs) {
     STATE.timeLogs = [];
+  }
+
+  if (!STATE.objectives) {
+    STATE.objectives = [];
+  }
+
+  if (!STATE.commitments) {
+    STATE.commitments = [];
   }
 
   saveToStorage();
@@ -255,6 +266,7 @@ function render() {
   renderTimeWasters();
   renderWeekTab();
   renderInsights();
+  renderStrategize();
 }
 
 function renderHeader() {
@@ -1132,20 +1144,213 @@ function sendMailto(subject, body) {
 }
 
 /* ---------------------------------------------------------- */
+/* Strategize tab                                                 */
+/* Long-term objectives up top; below that, a tool to stipulate   */
+/* an activity for specific days or a range — it auto-fills the   */
+/* first open slot on each day, skipping any day already full.    */
+/* ---------------------------------------------------------- */
+
+function renderStrategize() {
+  renderObjectives();
+  renderCommitActivitySelect();
+  renderCommitHistory();
+}
+
+function renderObjectives() {
+  const list = document.getElementById("objectives-list");
+  list.innerHTML = "";
+
+  if (!STATE.objectives.length) {
+    list.innerHTML = `<div class="wasters-empty">Nothing here yet — add your first objective below.</div>`;
+    return;
+  }
+
+  STATE.objectives.forEach((obj) => {
+    const row = document.createElement("div");
+    row.className = "objective-row";
+    row.innerHTML = `
+      <div class="objective-main">
+        <span class="objective-label">${escapeHtml(obj.label)}</span>
+        ${obj.detail ? `<div class="objective-detail">${escapeHtml(obj.detail)}</div>` : ""}
+      </div>
+      <span class="remove-objective" title="Remove">✕</span>
+    `;
+    row.querySelector(".remove-objective").addEventListener("click", () => removeObjective(obj.id));
+    list.appendChild(row);
+  });
+}
+
+function addObjective(label, detail) {
+  const trimmed = (label || "").trim();
+  if (!trimmed) return null;
+  const obj = { id: "obj_" + Date.now(), label: trimmed, detail: (detail || "").trim() };
+  STATE.objectives.push(obj);
+  saveToStorage();
+  return obj;
+}
+
+function removeObjective(id) {
+  STATE.objectives = STATE.objectives.filter((o) => o.id !== id);
+  saveToStorage();
+  renderObjectives();
+}
+
+function renderCommitActivitySelect() {
+  const select = document.getElementById("commit-activity-select");
+  if (!select) return;
+  const prevValue = select.value;
+  select.innerHTML = "";
+
+  if (!STATE.activities.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No activities yet — add one from Today first";
+    select.appendChild(opt);
+    return;
+  }
+
+  STATE.activities.forEach((a) => {
+    const opt = document.createElement("option");
+    opt.value = a.id;
+    opt.textContent = a.label;
+    select.appendChild(opt);
+  });
+
+  if (prevValue && STATE.activities.some((a) => a.id === prevValue)) {
+    select.value = prevValue;
+  }
+}
+
+function setCommitMode(mode) {
+  commitMode = mode;
+  document.querySelectorAll(".commit-mode-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  document.getElementById("commit-single-row").style.display = mode === "single" ? "" : "none";
+  document.getElementById("commit-range-row").style.display = mode === "range" ? "" : "none";
+}
+
+function applyCommit() {
+  const resultEl = document.getElementById("commit-result");
+  resultEl.textContent = "";
+
+  const activityId = document.getElementById("commit-activity-select").value;
+  const activity = activityById(activityId);
+  if (!activity) {
+    resultEl.textContent = "Pick an activity first.";
+    return;
+  }
+
+  let dates = [];
+  if (commitMode === "single") {
+    const d = document.getElementById("commit-date-single").value;
+    if (!d) {
+      resultEl.textContent = "Pick a date.";
+      return;
+    }
+    dates = [d];
+  } else {
+    const start = document.getElementById("commit-date-start").value;
+    const end = document.getElementById("commit-date-end").value;
+    if (!start || !end || end < start) {
+      resultEl.textContent = "Pick a valid start and end date.";
+      return;
+    }
+    let cursor = start;
+    let guard = 0;
+    while (cursor <= end && guard < 366) {
+      dates.push(cursor);
+      cursor = isoPlusDays(cursor, 1);
+      guard++;
+    }
+  }
+
+  let applied = 0;
+  let skipped = 0;
+  dates.forEach((iso) => {
+    ensureDay(iso);
+    const day = dayData(iso);
+    const emptySlot = day.slots.find((s) => s.status === "empty");
+    if (emptySlot) {
+      emptySlot.activityId = activity.id;
+      emptySlot.status = "active";
+      applied++;
+    } else {
+      skipped++;
+    }
+  });
+
+  STATE.commitments.push({
+    id: "commit_" + Date.now(),
+    activityId: activity.id,
+    activityLabel: activity.label,
+    mode: commitMode,
+    startDate: dates[0],
+    endDate: dates[dates.length - 1],
+    appliedCount: applied,
+    skippedCount: skipped,
+    createdAt: new Date().toISOString(),
+  });
+
+  saveToStorage();
+
+  resultEl.textContent = skipped > 0
+    ? `Filled ${applied} day${applied === 1 ? "" : "s"} — ${skipped} day${skipped === 1 ? "" : "s"} already had 3 tasks, so ${skipped === 1 ? "it was" : "those were"} skipped.`
+    : `Filled ${applied} day${applied === 1 ? "" : "s"}.`;
+
+  render();
+}
+
+function renderCommitHistory() {
+  const wrap = document.getElementById("commit-history");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  if (!STATE.commitments.length) {
+    wrap.innerHTML = `<div class="wasters-empty">Nothing stipulated yet.</div>`;
+    return;
+  }
+
+  [...STATE.commitments].reverse().forEach((c) => {
+    const rangeLabel = c.startDate === c.endDate
+      ? fmtDayLabelShort(c.startDate)
+      : `${fmtDayLabelShort(c.startDate)} – ${fmtDayLabelShort(c.endDate)}`;
+    const row = document.createElement("div");
+    row.className = "commit-row";
+    row.innerHTML = `
+      <div class="commit-main">
+        <span class="commit-label">${escapeHtml(c.activityLabel)}</span>
+        <span class="commit-range">${rangeLabel} — ${c.appliedCount} filled${c.skippedCount ? `, ${c.skippedCount} skipped` : ""}</span>
+      </div>
+      <span class="remove-commit" title="Remove from this list (does not undo filled slots)">✕</span>
+    `;
+    row.querySelector(".remove-commit").addEventListener("click", () => {
+      STATE.commitments = STATE.commitments.filter((x) => x.id !== c.id);
+      saveToStorage();
+      renderCommitHistory();
+    });
+    wrap.appendChild(row);
+  });
+}
+
+/* ---------------------------------------------------------- */
 /* Tab switching                                                  */
 /* ---------------------------------------------------------- */
 
 function switchTab(tab) {
   document.getElementById("tab-today-panel").style.display = tab === "today" ? "" : "none";
   document.getElementById("tab-week-panel").style.display = tab === "week" ? "" : "none";
+  document.getElementById("tab-strategize-panel").style.display = tab === "strategize" ? "" : "none";
   document.getElementById("tab-wasters-panel").style.display = tab === "wasters" ? "" : "none";
   document.getElementById("tab-insights-panel").style.display = tab === "insights" ? "" : "none";
   document.getElementById("tab-today").classList.toggle("active", tab === "today");
   document.getElementById("tab-week").classList.toggle("active", tab === "week");
+  document.getElementById("tab-strategize").classList.toggle("active", tab === "strategize");
   document.getElementById("tab-wasters").classList.toggle("active", tab === "wasters");
   document.getElementById("tab-insights").classList.toggle("active", tab === "insights");
   if (tab === "week") renderWeekTab();
   if (tab === "insights") renderInsights();
+  if (tab === "strategize") renderStrategize();
 }
 
 /* ---------------------------------------------------------- */
@@ -1192,8 +1397,27 @@ function wireUI() {
 
   document.getElementById("tab-today").addEventListener("click", () => switchTab("today"));
   document.getElementById("tab-week").addEventListener("click", () => switchTab("week"));
+  document.getElementById("tab-strategize").addEventListener("click", () => switchTab("strategize"));
   document.getElementById("tab-wasters").addEventListener("click", () => switchTab("wasters"));
   document.getElementById("tab-insights").addEventListener("click", () => switchTab("insights"));
+
+  document.getElementById("btn-add-objective").addEventListener("click", () => {
+    const input = document.getElementById("objective-input");
+    const detailInput = document.getElementById("objective-detail-input");
+    if (addObjective(input.value, detailInput.value)) {
+      input.value = "";
+      detailInput.value = "";
+      renderObjectives();
+    }
+  });
+  document.getElementById("objective-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btn-add-objective").click();
+  });
+
+  document.querySelectorAll(".commit-mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setCommitMode(btn.dataset.mode));
+  });
+  document.getElementById("btn-apply-commit").addEventListener("click", applyCommit);
 
   document.getElementById("btn-prev-week").addEventListener("click", () => goToWeek(-7));
   document.getElementById("btn-next-week").addEventListener("click", () => goToWeek(7));

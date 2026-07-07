@@ -900,6 +900,155 @@
     flex: 0 0 auto;
   }
 
+  /* ── Strategize tab ─────────────────────────────────────── */
+  #objectives-section, #commit-section {
+    padding: 28px 24px 8px;
+  }
+  .section-sub {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin: 0 0 16px;
+  }
+  #objectives-section h2, #commit-section h2 {
+    font-family: var(--serif);
+    font-size: 17px;
+    margin: 0 0 4px;
+  }
+
+  .objective-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 10px 12px;
+    background: var(--sage-tint);
+    margin-bottom: 8px;
+  }
+  .objective-main { flex: 1; }
+  .objective-label {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--sage-dark);
+    display: block;
+  }
+  .objective-detail {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin-top: 3px;
+  }
+  .remove-objective {
+    font-size: 13px;
+    color: var(--ink-soft);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px 4px;
+    flex: 0 0 auto;
+  }
+  .remove-objective:hover { opacity: 1; color: var(--clay-dark); }
+
+  .objective-add-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 14px 0 32px;
+  }
+  .objective-add-row input,
+  .objective-add-row textarea {
+    font-family: var(--sans);
+    font-size: 13px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 10px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .objective-add-row textarea {
+    min-height: 50px;
+    resize: vertical;
+  }
+
+  .commit-form {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    background: var(--paper-dim);
+  }
+  .commit-form select,
+  .commit-form input {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 11px;
+    background: var(--paper);
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .commit-mode-toggle {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .commit-mode-btn { border-radius: 20px; }
+  .commit-date-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .commit-date-row input { margin-bottom: 0; }
+  .commit-to {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    flex: 0 0 auto;
+  }
+  #btn-apply-commit { display: block; width: 100%; }
+  #commit-result {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-top: 10px;
+    min-height: 16px;
+  }
+
+  #commit-history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 40px;
+  }
+  .commit-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 9px 12px;
+  }
+  .commit-main { flex: 1; display: flex; flex-direction: column; }
+  .commit-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .commit-range {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .remove-commit {
+    font-size: 13px;
+    color: var(--ink-soft);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px 4px;
+    flex: 0 0 auto;
+  }
+  .remove-commit:hover { opacity: 1; color: var(--clay-dark); }
+
   ::-webkit-scrollbar { width: 9px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
@@ -920,6 +1069,7 @@
     <nav id="tab-nav">
       <button class="tab-btn active" id="tab-today" data-tab="today">Today</button>
       <button class="tab-btn" id="tab-week" data-tab="week">This week</button>
+      <button class="tab-btn" id="tab-strategize" data-tab="strategize">Strategize</button>
       <button class="tab-btn" id="tab-wasters" data-tab="wasters">Time wasters</button>
       <button class="tab-btn" id="tab-insights" data-tab="insights">Insights</button>
     </nav>
@@ -955,6 +1105,48 @@
     <section id="upcoming-section">
       <h2>Upcoming</h2>
       <div id="upcoming-list"></div>
+    </section>
+  </div>
+
+  <div id="tab-strategize-panel" class="tab-panel" style="display:none;">
+    <section id="objectives-section">
+      <h2>Long-term objectives</h2>
+      <p class="section-sub">The big picture worth keeping in view.</p>
+      <div id="objectives-list"></div>
+      <div class="objective-add-row">
+        <input id="objective-input" type="text" placeholder="e.g. Grow MindRoar to 10 paying clients" />
+        <textarea id="objective-detail-input" placeholder="Optional detail…"></textarea>
+        <button class="btn primary" id="btn-add-objective">Add objective</button>
+      </div>
+    </section>
+
+    <section id="commit-section">
+      <h2>Stipulate daily tasks</h2>
+      <p class="section-sub">Commit an activity to a day or a range — it fills an open slot automatically, skipping any day already full.</p>
+      <div class="commit-form">
+        <label class="detail-label">Activity</label>
+        <select id="commit-activity-select"></select>
+
+        <label class="detail-label">When</label>
+        <div class="commit-mode-toggle">
+          <button class="tab-btn commit-mode-btn active" data-mode="single">Single day</button>
+          <button class="tab-btn commit-mode-btn" data-mode="range">Date range</button>
+        </div>
+
+        <div id="commit-single-row" class="commit-date-row">
+          <input id="commit-date-single" type="date" />
+        </div>
+        <div id="commit-range-row" class="commit-date-row" style="display:none;">
+          <input id="commit-date-start" type="date" />
+          <span class="commit-to">to</span>
+          <input id="commit-date-end" type="date" />
+        </div>
+
+        <button class="btn primary" id="btn-apply-commit">Apply</button>
+        <div id="commit-result"></div>
+      </div>
+
+      <div id="commit-history"></div>
     </section>
   </div>
 
