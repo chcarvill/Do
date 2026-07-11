@@ -968,6 +968,105 @@
     resize: vertical;
   }
 
+  /* ── Targeted Action tab ────────────────────────────────── */
+  #ta-section {
+    padding: 28px 24px 8px;
+  }
+  #ta-section h2 {
+    font-family: var(--serif);
+    font-size: 17px;
+    margin: 0 0 4px;
+  }
+  .ta-venture-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 12px 14px;
+    background: var(--paper-dim);
+    margin-bottom: 10px;
+  }
+  .ta-venture-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .ta-venture-row select,
+  .ta-venture-row input {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 13px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--paper);
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+  #ta-generate-form { margin-top: 8px; }
+  #btn-ta-generate { display: block; width: 100%; }
+  #ta-generate-result {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  #ta-history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 40px;
+  }
+  .action-badge {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 600;
+    border-radius: 20px;
+    padding: 2px 8px;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+  .action-badge.market {
+    background: var(--clay-tint);
+    color: var(--clay-dark);
+  }
+  .action-badge.improve {
+    background: var(--sage-tint);
+    color: var(--sage-dark);
+  }
+  .action-badge.custom {
+    background: var(--gray-tint);
+    color: var(--ink-soft);
+  }
+  .waster-row input.ta-category-name-input {
+    flex: 1;
+    border: 1px solid transparent;
+    background: transparent;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink);
+    padding: 3px 4px;
+    border-radius: 5px;
+  }
+  .waster-row input.ta-category-name-input:hover,
+  .waster-row input.ta-category-name-input:focus {
+    border-color: var(--line);
+    background: var(--paper);
+    outline: none;
+  }
+  .ta-category-reserved {
+    font-size: 10px;
+    color: var(--ink-soft);
+    opacity: 0.6;
+    flex: 0 0 auto;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
   .commit-form {
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -1070,6 +1169,7 @@
       <button class="tab-btn active" id="tab-today" data-tab="today">Today</button>
       <button class="tab-btn" id="tab-week" data-tab="week">This week</button>
       <button class="tab-btn" id="tab-strategize" data-tab="strategize">Strategize</button>
+      <button class="tab-btn" id="tab-targeted-action" data-tab="targeted-action">Targeted Action</button>
       <button class="tab-btn" id="tab-wasters" data-tab="wasters">Time wasters</button>
       <button class="tab-btn" id="tab-insights" data-tab="insights">Insights</button>
     </nav>
@@ -1150,6 +1250,32 @@
     </section>
   </div>
 
+  <div id="tab-targeted-action-panel" class="tab-panel" style="display:none;">
+    <section id="ta-section">
+      <h2>Targeted Action</h2>
+      <p class="section-sub">Marketing and improvement, married — not alternated. Set an outreach day per venture (it gets a sharpen-first market slot) and a stage/ratio (how many non-outreach days that week should carry an improve touch). Then generate the week — it fills open slots only, same as Strategize.</p>
+
+      <h2 style="margin-top:8px;">Attribution categories</h2>
+      <p class="section-sub">Market and Improve drive the generator below and can be renamed but not removed. Add your own (Admin, Delivery, whatever) and apply them to any task by tapping its ✎ detail button — this is what rolls up in Insights regardless of which venture the task belongs to.</p>
+      <div id="ta-categories-list"></div>
+      <div class="wasters-add-row">
+        <input id="ta-category-input" type="text" placeholder="e.g. Admin" />
+        <button class="btn" id="btn-add-ta-category">Add</button>
+      </div>
+
+      <h2 style="margin-top:24px;">Ventures</h2>
+      <div id="ta-ventures-list"></div>
+
+      <div class="commit-form" id="ta-generate-form">
+        <button class="btn primary" id="btn-ta-generate">Generate this week's schedule</button>
+        <div id="ta-generate-result"></div>
+      </div>
+
+      <h2 style="margin-top:28px;">Past runs</h2>
+      <div id="ta-history"></div>
+    </section>
+  </div>
+
   <div id="tab-wasters-panel" class="tab-panel" style="display:none;">
     <section id="wasters-section">
       <button class="btn primary" id="btn-email-wasters">✉ Email these lists</button>
@@ -1190,6 +1316,8 @@
       <div id="insights-summary"></div>
       <div id="insights-chart-wrap"></div>
       <div id="insights-legend"></div>
+      <h2 id="insights-category-heading" style="font-family:var(--serif); font-size:15px; margin:22px 0 8px;">By category</h2>
+      <div id="insights-category-legend"></div>
     </section>
   </div>
 
@@ -1254,6 +1382,8 @@
     <input id="detail-link" type="url" placeholder="https://…" />
     <label class="detail-label">Worth checking</label>
     <input id="detail-note" type="text" placeholder="e.g. Check Mission Control for context" />
+    <label class="detail-label">Category</label>
+    <select id="detail-category"></select>
     <div class="modal-actions">
       <button class="btn" id="btn-cancel-detail">Close</button>
       <button class="btn primary" id="btn-save-detail">Save</button>
@@ -1279,6 +1409,8 @@
     <input id="log-time-date" type="date" />
     <label class="detail-label">Minutes</label>
     <input id="log-time-minutes" type="number" min="1" placeholder="e.g. 45" />
+    <label class="detail-label">Category</label>
+    <select id="log-time-category-select"></select>
     <div class="modal-actions">
       <button class="btn" id="btn-cancel-log-time">Cancel</button>
       <button class="btn primary" id="btn-save-log-time" disabled>Save</button>

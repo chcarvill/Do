@@ -27,7 +27,35 @@ let STATE = {
   timeLogs: [],   // [{id, itemType: 'activity'|'waster', itemId, itemLabel, minutes, date, loggedAt}]
   objectives: [], // [{id, label, detail}]  -- long-term objectives
   commitments: [], // [{id, activityId, activityLabel, mode, startDate, endDate, appliedCount, skippedCount, createdAt}]
+  targetedAction: {
+    ventures: {}, // activityId -> { outreachDay: null|0-6 (Mon=0), ratio: 'market-heavy'|'balanced'|'improve-heavy', sharpenMinutes: 20 }
+  },
+  taRuns: [], // [{id, weekLabel, marketApplied, improveApplied, skipped, createdAt}]
+  categories: [], // [{id, label}] -- user-managed attribution categories for tasks/time
 };
+
+const TA_RATIO_LABELS = {
+  "market-heavy": "Market-heavy — offer's proven, get it in front of people",
+  "balanced": "Balanced — split attention evenly",
+  "improve-heavy": "Improve-heavy — offer still needs work before pushing harder",
+};
+
+// how many non-outreach-day "improve" touches per week each ratio aims for
+const TA_RATIO_IMPROVE_TOUCHES = {
+  "market-heavy": 1,
+  "balanced": 2,
+  "improve-heavy": 3,
+};
+
+const TA_WEEKDAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+// The generator always drives outreach-day / ratio-fill slots through these two
+// fixed category ids so its logic keeps working even if the person renames the
+// labels. Any other category is free-form and only ever applied manually via
+// the detail modal — it never gets auto-assigned by generateTargetedActionWeek().
+const CAT_MARKET_ID = "cat_market";
+const CAT_IMPROVE_ID = "cat_improve";
+const RESERVED_CATEGORY_IDS = [CAT_MARKET_ID, CAT_IMPROVE_ID];
 
 let pendingSlotIndex = null;   // which stone (0/1/2) the picker modal is filling
 let pendingIso = null;         // which day's slot the picker modal is filling
@@ -41,6 +69,7 @@ let pendingLogItemType = null; // 'activity' | 'waster' — what the time-log mo
 let pendingLogItemId = null;
 let pendingLogItemLabel = null;
 let pendingLogIsFreeform = false; // true when opened via the standalone "+ Log time" button
+let pendingLogItemCategory = null; // prefilled category id when opened from a slot with one set
 let commitMode = "single"; // 'single' | 'range' — current mode in the Strategize commit form
 let insightsRange = "today";   // 'today' | 'week' | 'all' — current Insights tab filter
 
@@ -89,6 +118,21 @@ function boot() {
 
   if (!STATE.commitments) {
     STATE.commitments = [];
+  }
+
+  if (!STATE.targetedAction) {
+    STATE.targetedAction = { ventures: {} };
+  }
+
+  if (!STATE.taRuns) {
+    STATE.taRuns = [];
+  }
+
+  if (!STATE.categories || !STATE.categories.length) {
+    STATE.categories = [
+      { id: CAT_MARKET_ID, label: "Market" },
+      { id: CAT_IMPROVE_ID, label: "Improve" },
+    ];
   }
 
   saveToStorage();
@@ -180,9 +224,9 @@ function ensureDay(iso) {
   if (!STATE.days[iso]) {
     STATE.days[iso] = {
       slots: [
-        { id: "s_" + iso + "_0", activityId: null, status: "empty", detail: "", link: "", note: "" },
-        { id: "s_" + iso + "_1", activityId: null, status: "empty", detail: "", link: "", note: "" },
-        { id: "s_" + iso + "_2", activityId: null, status: "empty", detail: "", link: "", note: "" },
+        { id: "s_" + iso + "_0", activityId: null, status: "empty", detail: "", link: "", note: "", actionType: null },
+        { id: "s_" + iso + "_1", activityId: null, status: "empty", detail: "", link: "", note: "", actionType: null },
+        { id: "s_" + iso + "_2", activityId: null, status: "empty", detail: "", link: "", note: "", actionType: null },
       ],
       log: [],
     };
@@ -194,6 +238,9 @@ function ensureDay(iso) {
       if (s.detail === undefined) { s.detail = ""; changed = true; }
       if (s.link === undefined) { s.link = ""; changed = true; }
       if (s.note === undefined) { s.note = ""; changed = true; }
+      if (s.actionType === undefined) { s.actionType = null; changed = true; }
+      if (s.actionType === "market") { s.actionType = CAT_MARKET_ID; changed = true; }
+      if (s.actionType === "improve") { s.actionType = CAT_IMPROVE_ID; changed = true; }
     });
     if (changed) saveToStorage();
   }
@@ -267,6 +314,7 @@ function render() {
   renderWeekTab();
   renderInsights();
   renderStrategize();
+  renderTargetedAction();
 }
 
 function renderHeader() {
@@ -309,6 +357,7 @@ function renderStones() {
         <span class="stone-detail-btn" title="Add detail, link, or a note">✎</span>
         <span class="stone-time-btn" title="Log time spent">⏱</span>
         <span class="stone-activity">${escapeHtml(label)}</span>
+        ${actionBadgeHtml(slot.actionType)}
         <span class="stone-indicators">${slotIndicatorsHtml(slot)}</span>
         ${
           slot.status === "done"
@@ -329,7 +378,7 @@ function renderStones() {
       const timeEl = stone.querySelector(".stone-time-btn");
       timeEl.addEventListener("click", (e) => {
         e.stopPropagation();
-        openLogTimeModal("activity", activity ? activity.id : slot.activityId, label);
+        openLogTimeModal("activity", activity ? activity.id : slot.activityId, label, slot.actionType);
       });
       const linkEl = stone.querySelector(".stone-link");
       if (linkEl) linkEl.addEventListener("click", (e) => e.stopPropagation());
@@ -344,6 +393,23 @@ function renderStones() {
 
     row.appendChild(stone);
   });
+}
+
+function categoryById(id) {
+  return STATE.categories.find((c) => c.id === id);
+}
+
+function actionBadgeHtml(actionType) {
+  if (!actionType) return "";
+  const cat = categoryById(actionType);
+  if (!cat) return "";
+  if (actionType === CAT_MARKET_ID) {
+    return `<span class="action-badge market" title="Targeted Action category">📣 ${escapeHtml(cat.label)}</span>`;
+  }
+  if (actionType === CAT_IMPROVE_ID) {
+    return `<span class="action-badge improve" title="Targeted Action category">🔧 ${escapeHtml(cat.label)}</span>`;
+  }
+  return `<span class="action-badge custom" title="Category">🏷 ${escapeHtml(cat.label)}</span>`;
 }
 
 function slotIndicatorsHtml(slot) {
@@ -585,6 +651,7 @@ function confirmReason() {
   } else {
     slot.activityId = null;
     slot.status = "empty";
+    slot.actionType = null;
   }
 
   saveToStorage();
@@ -605,6 +672,9 @@ function openDetailModal(iso, slotIndex) {
   document.getElementById("detail-text").value = slot.detail || "";
   document.getElementById("detail-link").value = slot.link || "";
   document.getElementById("detail-note").value = slot.note || "";
+  const catSelect = document.getElementById("detail-category");
+  catSelect.innerHTML = `<option value="">No category</option>` +
+    STATE.categories.map((c) => `<option value="${c.id}" ${slot.actionType === c.id ? "selected" : ""}>${escapeHtml(c.label)}</option>`).join("");
   document.getElementById("detail-overlay").classList.add("open");
 }
 
@@ -619,6 +689,7 @@ function saveDetail() {
   slot.detail = document.getElementById("detail-text").value.trim();
   slot.link = document.getElementById("detail-link").value.trim();
   slot.note = document.getElementById("detail-note").value.trim();
+  slot.actionType = document.getElementById("detail-category").value || null;
   saveToStorage();
   closeDetailModal();
   render();
@@ -628,16 +699,18 @@ function saveDetail() {
 /* Log time modal — manual duration entry, any date, any item    */
 /* ---------------------------------------------------------- */
 
-function openLogTimeModal(itemType, itemId, itemLabel) {
+function openLogTimeModal(itemType, itemId, itemLabel, category) {
   pendingLogIsFreeform = false;
   pendingLogItemType = itemType;
   pendingLogItemId = itemId;
   pendingLogItemLabel = itemLabel;
+  pendingLogItemCategory = category || null;
   document.getElementById("log-time-item-name-wrap").style.display = "";
   document.getElementById("log-time-item-name").textContent = itemLabel;
   document.getElementById("log-time-picker-row").style.display = "none";
   document.getElementById("log-time-date").value = todayISO();
   document.getElementById("log-time-minutes").value = "";
+  populateLogTimeCategorySelect(pendingLogItemCategory);
   document.getElementById("btn-save-log-time").disabled = true;
   document.getElementById("log-time-overlay").classList.add("open");
 }
@@ -647,14 +720,23 @@ function openLogTimeModalFreeform() {
   pendingLogItemType = null;
   pendingLogItemId = null;
   pendingLogItemLabel = null;
+  pendingLogItemCategory = null;
   document.getElementById("log-time-item-name-wrap").style.display = "none";
   document.getElementById("log-time-picker-row").style.display = "";
   document.getElementById("log-time-type-select").value = "activity";
   populateLogTimeItemSelect();
   document.getElementById("log-time-date").value = todayISO();
   document.getElementById("log-time-minutes").value = "";
+  populateLogTimeCategorySelect(null);
   document.getElementById("btn-save-log-time").disabled = true;
   document.getElementById("log-time-overlay").classList.add("open");
+}
+
+function populateLogTimeCategorySelect(selectedId) {
+  const select = document.getElementById("log-time-category-select");
+  if (!select) return;
+  select.innerHTML = `<option value="">No category</option>` +
+    STATE.categories.map((c) => `<option value="${c.id}" ${selectedId === c.id ? "selected" : ""}>${escapeHtml(c.label)}</option>`).join("");
 }
 
 function populateLogTimeItemSelect() {
@@ -686,6 +768,7 @@ function closeLogTimeModal() {
   pendingLogItemType = null;
   pendingLogItemId = null;
   pendingLogItemLabel = null;
+  pendingLogItemCategory = null;
   pendingLogIsFreeform = false;
 }
 
@@ -717,6 +800,7 @@ function saveLogTime() {
     itemLabel,
     minutes,
     date,
+    category: document.getElementById("log-time-category-select").value || null,
     loggedAt: new Date().toISOString(),
   });
 
@@ -797,6 +881,7 @@ function renderInsights() {
   if (!entries.length) {
     summary.textContent = "";
     wrap.innerHTML = `<div id="insights-empty">No time logged for this range yet — tap the ⏱ on a task or time waster to start.</div>`;
+    renderInsightsCategoryBreakdown([]);
     return;
   }
 
@@ -843,6 +928,50 @@ function renderInsights() {
       <span class="legend-pct">${pct}%</span>
     `;
     legend.appendChild(row);
+  });
+
+  renderInsightsCategoryBreakdown(entries);
+}
+
+const CATEGORY_COLORS = ["#4D8C8C", "#5A7FB5", "#8C6FB0", "#C97DA0", "#D9A441", "#8C8C8C"];
+
+function renderInsightsCategoryBreakdown(entries) {
+  const wrap = document.getElementById("insights-category-legend");
+  const heading = document.getElementById("insights-category-heading");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  const categorized = entries.filter((e) => e.category);
+  if (!categorized.length) {
+    if (heading) heading.style.display = "none";
+    wrap.style.display = "none";
+    return;
+  }
+  if (heading) heading.style.display = "";
+  wrap.style.display = "";
+
+  const map = new Map();
+  categorized.forEach((e) => {
+    if (!map.has(e.category)) map.set(e.category, 0);
+    map.set(e.category, map.get(e.category) + e.minutes);
+  });
+
+  const total = Array.from(map.values()).reduce((s, m) => s + m, 0);
+  const rows = Array.from(map.entries())
+    .map(([catId, minutes]) => ({ label: (categoryById(catId) || {}).label || "Removed category", minutes }))
+    .sort((a, b) => b.minutes - a.minutes);
+
+  rows.forEach((r, i) => {
+    const pct = Math.round((r.minutes / total) * 100);
+    const row = document.createElement("div");
+    row.className = "legend-row";
+    row.innerHTML = `
+      <span class="dot" style="background:${CATEGORY_COLORS[i % CATEGORY_COLORS.length]};"></span>
+      <span class="legend-label">${escapeHtml(r.label)}</span>
+      <span class="legend-time">${fmtMinutes(r.minutes)}</span>
+      <span class="legend-pct">${pct}%</span>
+    `;
+    wrap.appendChild(row);
   });
 }
 
@@ -992,6 +1121,7 @@ function renderWeekDays() {
         chip.className = `week-slot-chip ${slot.status}`;
         chip.innerHTML = `
           <span class="chip-label">${escapeHtml(label)}</span>
+          ${actionBadgeHtml(slot.actionType)}
           <span class="stone-indicators">${slotIndicatorsHtml(slot)}</span>
           <span class="chip-actions">
             <span class="chip-time-btn" title="Log time spent">⏱</span>
@@ -1001,7 +1131,7 @@ function renderWeekDays() {
         `;
         chip.querySelector(".chip-time-btn").addEventListener("click", (e) => {
           e.stopPropagation();
-          openLogTimeModal("activity", activity ? activity.id : slot.activityId, label);
+          openLogTimeModal("activity", activity ? activity.id : slot.activityId, label, slot.actionType);
         });
         chip.querySelector(".chip-detail-btn").addEventListener("click", (e) => {
           e.stopPropagation();
@@ -1082,7 +1212,8 @@ function emailWeek() {
       filled.forEach((s) => {
         const activity = activityById(s.activityId);
         const label = activity ? activity.label : "Unknown";
-        body += `  - ${label}${s.status === "done" ? " (done)" : ""}\n`;
+        const tag = s.actionType === "market" ? " [MARKET]" : s.actionType === "improve" ? " [IMPROVE]" : "";
+        body += `  - ${label}${tag}${s.status === "done" ? " (done)" : ""}\n`;
         if (s.detail) body += `      detail: ${s.detail}\n`;
         if (s.link) body += `      link: ${s.link}\n`;
         if (s.note) body += `      worth checking: ${s.note}\n`;
@@ -1334,6 +1465,248 @@ function renderCommitHistory() {
 }
 
 /* ---------------------------------------------------------- */
+/* Targeted Action tab                                            */
+/* Marries marketing (outreach) with product improvement.        */
+/* Per venture: an assigned outreach day (which gets a market     */
+/* slot, with a sharpen-first note), and a ratio that sets how    */
+/* many non-outreach days that week should carry an improve       */
+/* touch. "Generate this week" writes it into open slots the      */
+/* same way Strategize's commit tool does — it never overwrites   */
+/* an already-filled slot.                                        */
+/* ---------------------------------------------------------- */
+
+function getVentureConfig(activityId) {
+  const existing = STATE.targetedAction.ventures[activityId];
+  return existing || { outreachDay: null, ratio: "balanced", sharpenMinutes: 20 };
+}
+
+function setVentureConfig(activityId, patch) {
+  const current = getVentureConfig(activityId);
+  STATE.targetedAction.ventures[activityId] = { ...current, ...patch };
+  saveToStorage();
+}
+
+function renderTargetedAction() {
+  renderTaCategoryList();
+  renderTaVentureList();
+  renderTaHistory();
+}
+
+function addCategory(label) {
+  const trimmed = (label || "").trim();
+  if (!trimmed) return null;
+  const cat = { id: "cat_" + Date.now(), label: trimmed };
+  STATE.categories.push(cat);
+  saveToStorage();
+  return cat;
+}
+
+function removeCategory(id) {
+  if (RESERVED_CATEGORY_IDS.includes(id)) return; // Market/Improve power the generator — rename, don't remove
+  STATE.categories = STATE.categories.filter((c) => c.id !== id);
+  // clear it off anywhere it was applied so nothing points at a dead category
+  Object.values(STATE.days).forEach((day) => {
+    day.slots.forEach((s) => {
+      if (s.actionType === id) s.actionType = null;
+    });
+  });
+  saveToStorage();
+  render();
+}
+
+function renameCategory(id, label) {
+  const trimmed = (label || "").trim();
+  if (!trimmed) return;
+  const cat = categoryById(id);
+  if (cat) {
+    cat.label = trimmed;
+    saveToStorage();
+    render();
+  }
+}
+
+function renderTaCategoryList() {
+  const list = document.getElementById("ta-categories-list");
+  if (!list) return;
+  list.innerHTML = "";
+
+  STATE.categories.forEach((cat) => {
+    const reserved = RESERVED_CATEGORY_IDS.includes(cat.id);
+    const row = document.createElement("div");
+    row.className = "waster-row";
+    row.innerHTML = `
+      <span class="dot"></span>
+      <input class="ta-category-name-input" type="text" value="${escapeAttr(cat.label)}" />
+      ${reserved ? `<span class="ta-category-reserved" title="Used by the generator — rename freely, can't remove">generator</span>` : `<span class="remove-waster" title="Remove">✕</span>`}
+    `;
+    row.querySelector(".ta-category-name-input").addEventListener("change", (e) => {
+      renameCategory(cat.id, e.target.value);
+    });
+    const removeEl = row.querySelector(".remove-waster");
+    if (removeEl) {
+      removeEl.addEventListener("click", () => removeCategory(cat.id));
+    }
+    list.appendChild(row);
+  });
+}
+
+function renderTaVentureList() {
+  const list = document.getElementById("ta-ventures-list");
+  if (!list) return;
+  list.innerHTML = "";
+
+  if (!STATE.activities.length) {
+    list.innerHTML = `<div class="wasters-empty">No ventures yet — add one from Today first.</div>`;
+    return;
+  }
+
+  STATE.activities.forEach((a) => {
+    const cfg = getVentureConfig(a.id);
+    const row = document.createElement("div");
+    row.className = "ta-venture-row";
+
+    const dayOptions = [`<option value="">No outreach day set</option>`]
+      .concat(TA_WEEKDAY_LABELS.map((label, i) => `<option value="${i}" ${cfg.outreachDay === i ? "selected" : ""}>${label}</option>`))
+      .join("");
+
+    const ratioOptions = Object.keys(TA_RATIO_LABELS)
+      .map((key) => `<option value="${key}" ${cfg.ratio === key ? "selected" : ""}>${TA_RATIO_LABELS[key]}</option>`)
+      .join("");
+
+    row.innerHTML = `
+      <div class="ta-venture-name">${escapeHtml(a.label)}</div>
+      <label class="detail-label">Outreach day</label>
+      <select class="ta-day-select">${dayOptions}</select>
+      <label class="detail-label">Stage / ratio</label>
+      <select class="ta-ratio-select">${ratioOptions}</select>
+      <label class="detail-label">Sharpen first (minutes)</label>
+      <input class="ta-sharpen-input" type="number" min="0" max="180" step="5" value="${cfg.sharpenMinutes}" />
+    `;
+
+    row.querySelector(".ta-day-select").addEventListener("change", (e) => {
+      const val = e.target.value;
+      setVentureConfig(a.id, { outreachDay: val === "" ? null : parseInt(val, 10) });
+    });
+    row.querySelector(".ta-ratio-select").addEventListener("change", (e) => {
+      setVentureConfig(a.id, { ratio: e.target.value });
+    });
+    row.querySelector(".ta-sharpen-input").addEventListener("change", (e) => {
+      const val = parseInt(e.target.value, 10);
+      setVentureConfig(a.id, { sharpenMinutes: val > 0 ? val : 0 });
+    });
+
+    list.appendChild(row);
+  });
+}
+
+function generateTargetedActionWeek() {
+  const resultEl = document.getElementById("ta-generate-result");
+  if (resultEl) resultEl.textContent = "";
+
+  if (!STATE.activities.length) {
+    if (resultEl) resultEl.textContent = "Add a venture from Today first.";
+    return;
+  }
+
+  ensureWeek(currentWeekStart);
+  const dates = weekDates(currentWeekStart); // index 0=Mon..6=Sun, matches TA_WEEKDAY_LABELS
+
+  let marketApplied = 0;
+  let improveApplied = 0;
+  let skipped = 0;
+
+  // Pass 1: outreach-day market slots take priority, venture by venture.
+  const marketCat = categoryById(CAT_MARKET_ID) || { label: "Market" };
+  STATE.activities.forEach((a) => {
+    const cfg = getVentureConfig(a.id);
+    if (cfg.outreachDay === null || cfg.outreachDay === undefined) return;
+    const iso = dates[cfg.outreachDay];
+    const day = dayData(iso);
+    const emptySlot = day.slots.find((s) => s.status === "empty");
+    if (emptySlot) {
+      emptySlot.activityId = a.id;
+      emptySlot.status = "active";
+      emptySlot.actionType = CAT_MARKET_ID;
+      emptySlot.note = `${marketCat.label} — outreach. Sharpen ${cfg.sharpenMinutes} min first, then go out.`;
+      marketApplied++;
+    } else {
+      skipped++;
+    }
+  });
+
+  // Pass 2: improve touches on non-outreach days, spread across the week,
+  // count driven by each venture's ratio.
+  const improveCat = categoryById(CAT_IMPROVE_ID) || { label: "Improve" };
+  STATE.activities.forEach((a) => {
+    const cfg = getVentureConfig(a.id);
+    const target = TA_RATIO_IMPROVE_TOUCHES[cfg.ratio] ?? 2;
+    let placed = 0;
+    for (let i = 0; i < dates.length && placed < target; i++) {
+      if (i === cfg.outreachDay) continue; // that day's slot is for marketing
+      const iso = dates[i];
+      const day = dayData(iso);
+      const emptySlot = day.slots.find((s) => s.status === "empty");
+      if (emptySlot) {
+        emptySlot.activityId = a.id;
+        emptySlot.status = "active";
+        emptySlot.actionType = CAT_IMPROVE_ID;
+        emptySlot.note = `${improveCat.label} — sharpen/build session.`;
+        improveApplied++;
+        placed++;
+      }
+    }
+    if (placed < target) skipped += target - placed;
+  });
+
+  STATE.taRuns.push({
+    id: "ta_" + Date.now(),
+    weekLabel: fmtWeekRangeLabel(currentWeekStart),
+    marketApplied,
+    improveApplied,
+    skipped,
+    createdAt: new Date().toISOString(),
+  });
+
+  saveToStorage();
+
+  if (resultEl) {
+    resultEl.textContent = `Filled ${marketApplied} market slot${marketApplied === 1 ? "" : "s"} and ${improveApplied} improve slot${improveApplied === 1 ? "" : "s"}` +
+      (skipped ? ` — ${skipped} touch${skipped === 1 ? "" : "es"} couldn't fit (days already full).` : ".");
+  }
+
+  render();
+}
+
+function renderTaHistory() {
+  const wrap = document.getElementById("ta-history");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  if (!STATE.taRuns.length) {
+    wrap.innerHTML = `<div class="wasters-empty">No runs yet — generate this week's schedule above.</div>`;
+    return;
+  }
+
+  [...STATE.taRuns].reverse().slice(0, 10).forEach((r) => {
+    const row = document.createElement("div");
+    row.className = "commit-row";
+    row.innerHTML = `
+      <div class="commit-main">
+        <span class="commit-label">${escapeHtml(r.weekLabel)}</span>
+        <span class="commit-range">${r.marketApplied} market, ${r.improveApplied} improve${r.skipped ? `, ${r.skipped} skipped` : ""}</span>
+      </div>
+      <span class="remove-commit" title="Remove from this list (does not undo filled slots)">✕</span>
+    `;
+    row.querySelector(".remove-commit").addEventListener("click", () => {
+      STATE.taRuns = STATE.taRuns.filter((x) => x.id !== r.id);
+      saveToStorage();
+      renderTaHistory();
+    });
+    wrap.appendChild(row);
+  });
+}
+
+/* ---------------------------------------------------------- */
 /* Tab switching                                                  */
 /* ---------------------------------------------------------- */
 
@@ -1341,16 +1714,19 @@ function switchTab(tab) {
   document.getElementById("tab-today-panel").style.display = tab === "today" ? "" : "none";
   document.getElementById("tab-week-panel").style.display = tab === "week" ? "" : "none";
   document.getElementById("tab-strategize-panel").style.display = tab === "strategize" ? "" : "none";
+  document.getElementById("tab-targeted-action-panel").style.display = tab === "targeted-action" ? "" : "none";
   document.getElementById("tab-wasters-panel").style.display = tab === "wasters" ? "" : "none";
   document.getElementById("tab-insights-panel").style.display = tab === "insights" ? "" : "none";
   document.getElementById("tab-today").classList.toggle("active", tab === "today");
   document.getElementById("tab-week").classList.toggle("active", tab === "week");
   document.getElementById("tab-strategize").classList.toggle("active", tab === "strategize");
+  document.getElementById("tab-targeted-action").classList.toggle("active", tab === "targeted-action");
   document.getElementById("tab-wasters").classList.toggle("active", tab === "wasters");
   document.getElementById("tab-insights").classList.toggle("active", tab === "insights");
   if (tab === "week") renderWeekTab();
   if (tab === "insights") renderInsights();
   if (tab === "strategize") renderStrategize();
+  if (tab === "targeted-action") renderTargetedAction();
 }
 
 /* ---------------------------------------------------------- */
@@ -1398,8 +1774,22 @@ function wireUI() {
   document.getElementById("tab-today").addEventListener("click", () => switchTab("today"));
   document.getElementById("tab-week").addEventListener("click", () => switchTab("week"));
   document.getElementById("tab-strategize").addEventListener("click", () => switchTab("strategize"));
+  document.getElementById("tab-targeted-action").addEventListener("click", () => switchTab("targeted-action"));
   document.getElementById("tab-wasters").addEventListener("click", () => switchTab("wasters"));
   document.getElementById("tab-insights").addEventListener("click", () => switchTab("insights"));
+
+  document.getElementById("btn-ta-generate").addEventListener("click", generateTargetedActionWeek);
+
+  document.getElementById("btn-add-ta-category").addEventListener("click", () => {
+    const input = document.getElementById("ta-category-input");
+    if (addCategory(input.value)) {
+      input.value = "";
+      renderTaCategoryList();
+    }
+  });
+  document.getElementById("ta-category-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btn-add-ta-category").click();
+  });
 
   document.getElementById("btn-add-objective").addEventListener("click", () => {
     const input = document.getElementById("objective-input");
