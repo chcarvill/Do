@@ -104,6 +104,22 @@
     padding: 32px 24px 8px;
   }
 
+  .stones-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .import-status {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--ink-muted, #888);
+    min-height: 16px;
+    margin-bottom: 12px;
+  }
+
   #stones-row {
     display: flex;
     gap: 16px;
@@ -1177,7 +1193,12 @@
 
   <div id="tab-today-panel" class="tab-panel">
     <section id="stones-section">
-      <button class="btn primary" id="btn-email-today">✉ Email today's tasks</button>
+      <div class="stones-toolbar">
+        <button class="btn primary" id="btn-email-today">✉ Email today's tasks</button>
+        <button class="btn" id="btn-import-portfolio-today">⇩ Import from Mission Control</button>
+      </div>
+      <input type="file" id="portfolio-import-file" accept="application/json" style="display:none;" />
+      <div id="portfolio-import-status-today" class="import-status"></div>
       <div id="stones-row"></div>
       <div id="stones-hint">Three, no more. Choose with intent.</div>
     </section>
@@ -1364,12 +1385,6 @@
     <div id="new-activity-row-2" style="display:flex; gap:8px;">
       <input id="new-activity-input-2" type="text" placeholder="e.g. Cold outreach" style="flex:1; font-family: var(--sans); font-size:13px; border:1px solid var(--line); border-radius:7px; padding:8px 10px; background: var(--paper); color: var(--ink);" />
       <button class="btn" id="btn-add-activity-2">Add</button>
-    </div>
-    <hr class="modal-divider" />
-    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <input type="file" id="portfolio-import-file" accept="application/json" style="display:none;" />
-      <button class="btn" id="btn-import-portfolio">Import from Mission Control</button>
-      <span id="portfolio-import-status" style="font-family: var(--sans); font-size:12px; color: var(--ink-muted, #888);"></span>
     </div>
     <div class="modal-actions">
       <button class="btn primary" id="btn-close-manage">Done</button>

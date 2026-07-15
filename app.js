@@ -1009,7 +1009,7 @@ function addVentureIfMissing(label) {
 // deleted on the Mission Control side, since a Do activity may already
 // have history (logged time, past days) attached to it.
 function importPortfolioJson(jsonText) {
-  const statusEl = document.getElementById("portfolio-import-status");
+  const statusEl = document.getElementById("portfolio-import-status-today");
   let data;
   try {
     data = JSON.parse(jsonText);
@@ -1031,7 +1031,7 @@ function importPortfolioJson(jsonText) {
     if (STATE.activities.length > before) added++;
   });
   renderManageList();
-  render(); // refresh stones/pickers in case they're open behind the modal
+  render(); // refresh stones/pickers so the new venture is selectable immediately
   if (statusEl) {
     statusEl.textContent = added
       ? `Imported ${added} new venture${added === 1 ? "" : "s"}.`
@@ -1046,7 +1046,15 @@ function handleVentureDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const venture = params.get("addVenture");
   if (!venture) return;
-  addVentureIfMissing(decodeURIComponent(venture));
+  const label = decodeURIComponent(venture);
+  const before = STATE.activities.length;
+  addVentureIfMissing(label);
+  const statusEl = document.getElementById("portfolio-import-status-today");
+  if (statusEl) {
+    statusEl.textContent = STATE.activities.length > before
+      ? `Added "${label}" from Mission Control.`
+      : `"${label}" is already in your activity list.`;
+  }
   // Clean the URL so refreshing/sharing doesn't re-trigger it.
   const url = new URL(window.location.href);
   url.searchParams.delete("addVenture");
@@ -1834,7 +1842,7 @@ function wireUI() {
     if (e.key === "Enter") document.getElementById("btn-add-activity-2").click();
   });
 
-  document.getElementById("btn-import-portfolio").addEventListener("click", () => {
+  document.getElementById("btn-import-portfolio-today").addEventListener("click", () => {
     document.getElementById("portfolio-import-file").click();
   });
   document.getElementById("portfolio-import-file").addEventListener("change", (e) => {
