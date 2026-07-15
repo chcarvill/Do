@@ -1365,6 +1365,12 @@
       <input id="new-activity-input-2" type="text" placeholder="e.g. Cold outreach" style="flex:1; font-family: var(--sans); font-size:13px; border:1px solid var(--line); border-radius:7px; padding:8px 10px; background: var(--paper); color: var(--ink);" />
       <button class="btn" id="btn-add-activity-2">Add</button>
     </div>
+    <hr class="modal-divider" />
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <input type="file" id="portfolio-import-file" accept="application/json" style="display:none;" />
+      <button class="btn" id="btn-import-portfolio">Import from Mission Control</button>
+      <span id="portfolio-import-status" style="font-family: var(--sans); font-size:12px; color: var(--ink-muted, #888);"></span>
+    </div>
     <div class="modal-actions">
       <button class="btn primary" id="btn-close-manage">Done</button>
     </div>

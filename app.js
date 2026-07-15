@@ -990,6 +990,69 @@ function addActivity(label) {
   return activity;
 }
 
+// Adds an activity only if no existing activity has the same label
+// (case-insensitive) -- used by both the Mission Control import and the
+// "Open in Do" deep link, so re-importing/re-clicking never creates dupes.
+function addVentureIfMissing(label) {
+  const trimmed = (label || "").trim();
+  if (!trimmed) return null;
+  const existing = STATE.activities.find(
+    (a) => a.label.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (existing) return existing;
+  return addActivity(trimmed);
+}
+
+// Parses a Mission Control portfolio export (array of {name, ...}) and
+// adds any ventures not already present as activities in the pool.
+// One-way, manual sync -- no attempt to remove activities that were
+// deleted on the Mission Control side, since a Do activity may already
+// have history (logged time, past days) attached to it.
+function importPortfolioJson(jsonText) {
+  const statusEl = document.getElementById("portfolio-import-status");
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch (err) {
+    if (statusEl) statusEl.textContent = "Couldn't read that file — is it a Mission Control portfolio export?";
+    return;
+  }
+  const items = Array.isArray(data) ? data : (Array.isArray(data.ventures) ? data.ventures : null);
+  if (!items) {
+    if (statusEl) statusEl.textContent = "Couldn't find any ventures in that file.";
+    return;
+  }
+  let added = 0;
+  items.forEach((item) => {
+    const label = item && (item.name || item.label);
+    if (!label) return;
+    const before = STATE.activities.length;
+    addVentureIfMissing(label);
+    if (STATE.activities.length > before) added++;
+  });
+  renderManageList();
+  render(); // refresh stones/pickers in case they're open behind the modal
+  if (statusEl) {
+    statusEl.textContent = added
+      ? `Imported ${added} new venture${added === 1 ? "" : "s"}.`
+      : "Nothing new to import -- already up to date.";
+  }
+}
+
+// Reads ?addVenture=NAME from the URL (the link Mission Control's Portfolio
+// cards open) and adds it to the pool on arrival, so it's ready to pick
+// from immediately without a separate import step.
+function handleVentureDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const venture = params.get("addVenture");
+  if (!venture) return;
+  addVentureIfMissing(decodeURIComponent(venture));
+  // Clean the URL so refreshing/sharing doesn't re-trigger it.
+  const url = new URL(window.location.href);
+  url.searchParams.delete("addVenture");
+  window.history.replaceState({}, "", url.toString());
+}
+
 /* ---------------------------------------------------------- */
 /* Manage activities modal                                       */
 /* ---------------------------------------------------------- */
@@ -1771,6 +1834,20 @@ function wireUI() {
     if (e.key === "Enter") document.getElementById("btn-add-activity-2").click();
   });
 
+  document.getElementById("btn-import-portfolio").addEventListener("click", () => {
+    document.getElementById("portfolio-import-file").click();
+  });
+  document.getElementById("portfolio-import-file").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      importPortfolioJson(reader.result);
+      e.target.value = ""; // allow re-importing the same file later
+    };
+    reader.readAsText(file);
+  });
+
   document.getElementById("tab-today").addEventListener("click", () => switchTab("today"));
   document.getElementById("tab-week").addEventListener("click", () => switchTab("week"));
   document.getElementById("tab-strategize").addEventListener("click", () => switchTab("strategize"));
@@ -1874,6 +1951,8 @@ function wireUI() {
 function init() {
   wireUI();
   boot();
+  handleVentureDeepLink();
+  render();
 }
 
 if (document.readyState === "loading") {
