@@ -308,6 +308,7 @@ function computeStreak() {
 
 function render() {
   renderHeader();
+  renderOrationGate();
   renderStones();
   renderHistory();
   renderTimeWasters();
@@ -328,6 +329,69 @@ function renderHeader() {
       : `<span>start today</span>`;
 }
 
+// ══════════════════════════════════════════════
+//  ORATION GATE
+// ══════════════════════════════════════════════
+// Requires an oration to be logged today before the three task slots
+// unlock. This is a deliberate friction point, not a soft nudge -- the
+// slots stay visibly locked (not just reminded) until one is logged.
+// Where Orate lives is the single source of truth for oration history;
+// this app only keeps a local flag ("did I log one today") to gate the
+// slots, and pushes the actual log over to Orate via a deep link.
+const ORATE_APP_URL = "https://chcarvill.github.io/Communic8---orate/";
+const ORATION_TYPES = [
+  "Informal conversation", "Formal conversation", "Engaging a live audience",
+  "Presenting online", "Oration practice", "Storytelling / anecdote",
+  "Teaching / explaining", "Persuasion / pitching", "Phone or video call",
+];
+const ORATION_LOG_KEY = "do_oration_log";
+
+function loadOrationLog() {
+  try { return JSON.parse(localStorage.getItem(ORATION_LOG_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function hasOrationToday() {
+  const log = loadOrationLog();
+  return !!log[todayISO()];
+}
+function logOrationToday(type) {
+  const log = loadOrationLog();
+  log[todayISO()] = type;
+  localStorage.setItem(ORATION_LOG_KEY, JSON.stringify(log));
+}
+
+function renderOrationGate() {
+  const gate = document.getElementById("oration-gate");
+  const done = document.getElementById("oration-gate-done");
+  const log = loadOrationLog();
+  const todayType = log[todayISO()];
+
+  if (todayType) {
+    gate.style.display = "none";
+    done.style.display = "block";
+    done.textContent = `✓ Oration logged today (${todayType}) — task slots unlocked.`;
+    return;
+  }
+
+  done.style.display = "none";
+  gate.style.display = "block";
+  const grid = document.getElementById("oration-type-grid");
+  grid.innerHTML = ORATION_TYPES.map(
+    (t) => `<div class="type-btn" data-type="${escapeHtml(t)}">${escapeHtml(t)}</div>`
+  ).join("");
+  grid.querySelectorAll(".type-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const type = btn.getAttribute("data-type");
+      logOrationToday(type);
+      // Push the actual log over to Orate, which stays the source of
+      // truth for oration history/streaks/stats -- this app only cares
+      // about the daily gate.
+      window.open(ORATE_APP_URL + "?logType=" + encodeURIComponent(type), "_blank", "noopener");
+      render();
+    });
+  });
+}
+
 function renderStones() {
   const row = document.getElementById("stones-row");
   row.innerHTML = "";
@@ -339,13 +403,26 @@ function renderStones() {
     stone.dataset.slotIndex = i;
 
     if (slot.status === "empty") {
-      stone.className = "stone empty";
-      stone.innerHTML = `
+      const locked = !hasOrationToday();
+      stone.className = locked ? "stone empty locked" : "stone empty";
+      stone.innerHTML = locked
+        ? `
+        <span class="stone-number">${i + 1}</span>
+        <span class="stone-plus">🔒</span>
+        <span class="stone-cta">Log oration to unlock</span>
+      `
+        : `
         <span class="stone-number">${i + 1}</span>
         <span class="stone-plus">+</span>
         <span class="stone-cta">Pick a task</span>
       `;
-      stone.addEventListener("click", () => openPicker(iso, i));
+      stone.addEventListener("click", () => {
+        if (locked) {
+          document.getElementById("oration-gate").scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        openPicker(iso, i);
+      });
     } else {
       const activity = activityById(slot.activityId);
       const label = activity ? activity.label : "Unknown";
