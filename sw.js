@@ -1,5 +1,5 @@
 /* Minimal offline cache for Do — Three a Day. */
-const CACHE_NAME = "do-three-a-day-v15";
+const CACHE_NAME = "do-three-a-day-v16";
 const ASSETS = [
   "./",
   "./index.html",
